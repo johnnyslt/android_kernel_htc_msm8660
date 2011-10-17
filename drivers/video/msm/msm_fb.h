@@ -51,6 +51,7 @@
 #include <linux/hrtimer.h>
 
 #include <linux/fb.h>
+#include <linux/ion.h>
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
@@ -194,6 +195,7 @@ struct msm_fb_data_type {
 #if defined CONFIG_FB_MSM_MDP_ABL
 	boolean enable_abl;
 #endif
+	struct ion_client *client;
 };
 
 struct dentry *msm_fb_get_debugfs_root(void);
