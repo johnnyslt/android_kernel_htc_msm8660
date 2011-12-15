@@ -19,16 +19,4 @@ void htc_watchdog_monitor_init(void);
 void htc_watchdog_pet_cpu_record(void);
 void htc_watchdog_top_stat(void);
 
-struct htc_cpu_usage_stat {
-    cputime64_t user;
-    cputime64_t nice;
-    cputime64_t system;
-    cputime64_t softirq;
-    cputime64_t irq;
-    cputime64_t idle;
-    cputime64_t iowait;
-    cputime64_t steal;
-    cputime64_t guest;
-    cputime64_t guest_nice;
-};
 #endif

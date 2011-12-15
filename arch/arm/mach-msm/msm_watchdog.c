@@ -259,9 +259,6 @@ void pet_watchdog(void)
 	unsigned long long slack_ns;
 	unsigned long long bark_time_ns = bark_time * 1000000ULL;
 
-	if (!enable)
-	return;
-
 	slack = __raw_readl(msm_tmr0_base + WDT0_STS) >> 3;
 	slack = ((bark_time*WDT_HZ)/1000) - slack;
 	if (slack < min_slack_ticks)
@@ -277,8 +274,8 @@ void pet_watchdog(void)
 #if HTC_WATCHDOG_TOP_SCHED_DUMP
 	htc_watchdog_top_stat();
 #endif
+	htc_watchdog_pet_cpu_record();
 }
-EXPORT_SYMBOL(pet_watchdog);
 
 static void pet_watchdog_work(struct work_struct *work)
 {

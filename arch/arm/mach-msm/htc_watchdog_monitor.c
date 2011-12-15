@@ -15,7 +15,6 @@
 #include <linux/kernel_stat.h>
 #include <linux/vmalloc.h>
 #include <linux/sched.h>
-#include <linux/tick.h>
 #include "htc_watchdog_monitor.h"
 
 #define MAX_PID 32768
@@ -28,60 +27,36 @@
 static unsigned int *prev_proc_stat;
 static int *curr_proc_delta;
 static struct task_struct **task_ptr_array;
-static struct htc_cpu_usage_stat  old_cpu_stat;
+static struct cpu_usage_stat  old_cpu_stat;
 static spinlock_t lock;
 
-static u64 get_idle_time(int cpu)
-{
-    u64 idle, idle_time = get_cpu_idle_time_us(cpu, NULL);
-
-    if (idle_time == -1ULL)
-        
-        idle = kcpustat_cpu(cpu).cpustat[CPUTIME_IDLE];
-    else
-        idle = idle_time;
-
-    return idle;
-}
-
-static u64 get_iowait_time(int cpu)
-{
-    u64 iowait, iowait_time = get_cpu_iowait_time_us(cpu, NULL);
-
-    if (iowait_time == -1ULL)
-        
-        iowait = kcpustat_cpu(cpu).cpustat[CPUTIME_IOWAIT];
-    else
-		iowait = iowait_time;
-
-    return iowait;
-}
-static void get_all_cpu_stat(struct htc_cpu_usage_stat *cpu_stat)
+/* Sync fs/proc/stat.c to caculate all cpu statistics */
+static void get_all_cpu_stat(struct cpu_usage_stat *cpu_stat)
 {
 	int i;
-	u64 user, nice, system, idle, iowait, irq, softirq, steal;
-	u64 guest, guest_nice;
+	cputime64_t user, nice, system, idle, iowait, irq, softirq, steal;
+	cputime64_t guest, guest_nice;
 
 	if (!cpu_stat)
 		return;
 
 	user = nice = system = idle = iowait =
-		irq = softirq = steal = 0;
-	guest = guest_nice = 0;
+		irq = softirq = steal = cputime64_zero;
+	guest = guest_nice = cputime64_zero;
 
 	for_each_possible_cpu(i) {
-		user += kcpustat_cpu(i).cpustat[CPUTIME_USER];
-		nice += kcpustat_cpu(i).cpustat[CPUTIME_NICE];
-		system += kcpustat_cpu(i).cpustat[CPUTIME_SYSTEM];
-		idle += get_idle_time(i);
-		iowait += get_iowait_time(i);
-		irq += kcpustat_cpu(i).cpustat[CPUTIME_IRQ];
-		softirq += kcpustat_cpu(i).cpustat[CPUTIME_SOFTIRQ];
-		steal += kcpustat_cpu(i).cpustat[CPUTIME_STEAL];
-		guest += kcpustat_cpu(i).cpustat[CPUTIME_GUEST];
-		guest_nice += kcpustat_cpu(i).cpustat[CPUTIME_GUEST_NICE];
-
-
+		user = cputime64_add(user, kstat_cpu(i).cpustat.user);
+		nice = cputime64_add(nice, kstat_cpu(i).cpustat.nice);
+		system = cputime64_add(system, kstat_cpu(i).cpustat.system);
+		idle = cputime64_add(idle, kstat_cpu(i).cpustat.idle);
+		idle = cputime64_add(idle, arch_idle_time(i));
+		iowait = cputime64_add(iowait, kstat_cpu(i).cpustat.iowait);
+		irq = cputime64_add(irq, kstat_cpu(i).cpustat.irq);
+		softirq = cputime64_add(softirq, kstat_cpu(i).cpustat.softirq);
+		steal = cputime64_add(steal, kstat_cpu(i).cpustat.steal);
+		guest = cputime64_add(guest, kstat_cpu(i).cpustat.guest);
+		guest_nice = cputime64_add(guest_nice,
+			kstat_cpu(i).cpustat.guest_nice);
 	}
 	cpu_stat->user = user;
 	cpu_stat->nice = nice;
@@ -124,6 +99,7 @@ static int findBiggestInRange(int *array, int max_limit_idx)
 	return largest_idx;
 }
 
+/* sorting from large to small */
 static void sorting(int *source, int *output)
 {
 	int i;
@@ -135,7 +111,34 @@ static void sorting(int *source, int *output)
 	}
 }
 
+/*
+ *  Record the proc cpu statistic when petting watchdog
+ */
+void htc_watchdog_pet_cpu_record(void)
+{
+	struct task_struct *p;
+	ulong flags;
+	struct task_cputime cputime;
 
+	if (prev_proc_stat == NULL)
+		return;
+
+	spin_lock_irqsave(&lock, flags);
+	get_all_cpu_stat(&old_cpu_stat);
+
+	/* calculate the cpu time of each process */
+	for_each_process(p) {
+		if (p->pid < MAX_PID) {
+			thread_group_cputime(p, &cputime);
+			prev_proc_stat[p->pid] = cputime.stime + cputime.utime;
+		}
+	}
+	spin_unlock_irqrestore(&lock, flags);
+}
+
+/*
+ *  When watchdog bark, print the cpu statistic
+ */
 void htc_watchdog_top_stat(void)
 {
 	struct task_struct *p;
@@ -144,7 +147,7 @@ void htc_watchdog_top_stat(void)
 	unsigned long irq_time, idle_time, delta_time;
 	ulong flags;
 	struct task_cputime cputime;
-	struct htc_cpu_usage_stat new_cpu_stat;
+	struct cpu_usage_stat new_cpu_stat;
 
 	if (task_ptr_array == NULL ||
 			curr_proc_delta == NULL ||
@@ -154,12 +157,12 @@ void htc_watchdog_top_stat(void)
 	memset(curr_proc_delta, 0, sizeof(int) * MAX_PID);
 	memset(task_ptr_array, 0, sizeof(int) * MAX_PID);
 
-	printk(KERN_ERR"\n\n[%s] Start to dump:\n", __func__);
+	printk(KERN_ERR"\n\n[K][%s] Start to dump:\n", __func__);
 
 	spin_lock_irqsave(&lock, flags);
 	get_all_cpu_stat(&new_cpu_stat);
 
-
+	/* calculate the cpu time of each process */
 	for_each_process(p) {
 		thread_group_cputime(p, &cputime);
 
@@ -171,10 +174,10 @@ void htc_watchdog_top_stat(void)
 		}
 	}
 
-
+	/* sorting to get the top cpu consumers */
 	sorting(curr_proc_delta, top_loading);
 
-
+	/* calculate the total delta time */
 	user_time = (unsigned long)((new_cpu_stat.user + new_cpu_stat.nice)
 			- (old_cpu_stat.user + old_cpu_stat.nice));
 	system_time = (unsigned long)(new_cpu_stat.system - old_cpu_stat.system);
@@ -186,10 +189,10 @@ void htc_watchdog_top_stat(void)
 	- (old_cpu_stat.idle + old_cpu_stat.steal + old_cpu_stat.guest));
 	delta_time = user_time + system_time + io_time + irq_time + idle_time;
 
-
-	printk(KERN_ERR"CPU\t\tPID\t\tName\n");
+	/* print most time consuming processes */
+	printk(KERN_ERR"[K] CPU\t\tPID\t\tName\n");
 	for (i = 0; i < NUM_BUSY_THREAD_CHECK; i++) {
-		printk(KERN_ERR "%lu%%\t\t%d\t\t%s\n",
+		printk(KERN_ERR "[K] %lu%%\t\t%d\t\t%s\n",
 			curr_proc_delta[top_loading[i]] * 100 / delta_time,
 			top_loading[i],
 			task_ptr_array[top_loading[i]]->comm);
