@@ -3210,6 +3210,7 @@ static DEFINE_CLK_VOTER(dfab_sdc2_clk, &dfab_clk.c);
 static DEFINE_CLK_VOTER(dfab_sdc3_clk, &dfab_clk.c);
 static DEFINE_CLK_VOTER(dfab_sdc4_clk, &dfab_clk.c);
 static DEFINE_CLK_VOTER(dfab_sdc5_clk, &dfab_clk.c);
+static DEFINE_CLK_VOTER(dfab_scm_clk, &dfab_clk.c);
 
 static DEFINE_CLK_VOTER(ebi1_msmbus_clk, &ebi1_clk.c);
 static DEFINE_CLK_VOTER(ebi1_adm0_clk,   &ebi1_clk.c);
@@ -3824,6 +3825,7 @@ static struct clk_lookup msm_clocks_8x60[] = {
 	CLK_LOOKUP("bus_clk",		dfab_sdc3_clk.c, "msm_sdcc.3"),
 	CLK_LOOKUP("bus_clk",		dfab_sdc4_clk.c, "msm_sdcc.4"),
 	CLK_LOOKUP("bus_clk",		dfab_sdc5_clk.c, "msm_sdcc.5"),
+	CLK_LOOKUP("bus_clk",		dfab_scm_clk.c,	"scm"),
 
 	CLK_LOOKUP("ebi1_msmbus_clk",	ebi1_msmbus_clk.c, NULL),
 	CLK_LOOKUP("mem_clk",		ebi1_adm0_clk.c, "msm_dmov.0"),
