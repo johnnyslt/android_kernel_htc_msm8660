@@ -1838,6 +1838,7 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 			&data);
 
 			wl_event_to_host_order(&event);
+			tout = DHD_EVENT_TIMEOUT_MS;
 			if (event.event_type == WLC_E_BTA_HCI_EVENT) {
 #ifdef HTC_KlocWork
 				if(!data) {
@@ -1846,8 +1847,10 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 				else
 #endif
 				dhd_bta_doevt(dhdp, data, event.datalen);
+			} else if (event.event_type == WLC_E_PFN_NET_FOUND) {
+				tout *= 2;
+
 			}
-			tout = DHD_EVENT_TIMEOUT_MS;
 		}
 
 		ASSERT(ifidx < DHD_MAX_IFS && dhd->iflist[ifidx]);
