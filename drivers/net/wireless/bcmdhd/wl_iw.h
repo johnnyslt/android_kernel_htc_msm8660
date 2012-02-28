@@ -47,7 +47,8 @@
 #define BAND_SET_CMD				"SETBAND"
 #define DTIM_SKIP_GET_CMD			"DTIMSKIPGET"
 #define DTIM_SKIP_SET_CMD			"DTIMSKIPSET"
-#define SETSUSPEND_CMD				"SETSUSPENDOPT"
+#define SETSUSPENDOPT_CMD			"SETSUSPENDOPT"
+#define SETSUSPENDMODE_CMD			"SETSUSPENDMODE"
 #define PNOSSIDCLR_SET_CMD			"PNOSSIDCLR"
 
 #define PNOSETUP_SET_CMD			"PNOSETUP " 
@@ -181,7 +182,7 @@ extern int dhd_os_wake_force_unlock(dhd_pub_t *pub);
 extern int net_os_wake_lock_timeout(struct net_device *dev);
 extern int net_os_wake_lock_timeout_enable(struct net_device *dev, int val);
 extern int net_os_set_suspend_disable(struct net_device *dev, int val);
-extern int net_os_set_suspend(struct net_device *dev, int val);
+extern int net_os_set_suspend(struct net_device *dev, int val, int force);
 extern int net_os_set_dtim_skip(struct net_device *dev, int val);
 extern int net_os_set_packet_filter(struct net_device *dev, int val);
 extern int net_os_send_hang_message(struct net_device *dev);

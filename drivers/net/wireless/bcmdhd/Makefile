@@ -8,7 +8,7 @@
         -DSDIO_ISR_THREAD 		      \
         -DEMBEDDED_PLATFORM -DARP_OFFLOAD_SUPPORT -DPKT_FILTER_SUPPORT        \
         -DKEEP_ALIVE -DCONFIG_FIRST_SCAN -DAP_ONLY -DCUSTOM_OOB_GPIO_NUM=299  \
-        -DOOB_INTR_ONLY -DMMC_SDIO_ABORT                                      \
+        -DOOB_INTR_ONLY -DMMC_SDIO_ABORT -DDHD_USE_EARLYSUSPEND               \
         -I/home/takara/work/HTC/bcm4330b1 -I/home/takara/work/HTC/bcm4330b1/include
         #-DPNO_SUPPORT -DCSCAN -DSET_RANDOM_MAC_SOFTAP -DGET_CUSTOM_MAC_ENABLE 
 
