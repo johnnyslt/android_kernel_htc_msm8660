@@ -368,6 +368,9 @@ static void configure_bark_dump(void)
 static void init_watchdog_work(struct work_struct *work)
 {
 	u64 timeout = (bark_time * WDT_HZ)/1000;
+
+	configure_bark_dump();
+
 	__raw_writel(timeout, msm_tmr0_base + WDT0_BARK_TIME);
 	__raw_writel(timeout + 3*WDT_HZ, msm_tmr0_base + WDT0_BITE_TIME);
 
@@ -411,8 +414,6 @@ static int msm_watchdog_probe(struct platform_device *pdev)
 			  "apps_wdog_bark", NULL);
 	if (ret)
 		return -EINVAL;
-
-	configure_bark_dump();
 
 	delay_time = msecs_to_jiffies(pdata->pet_time);
 	schedule_work_on(0, &init_dogwork_struct);
