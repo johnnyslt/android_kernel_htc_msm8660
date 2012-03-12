@@ -431,7 +431,13 @@ void mdp4_overlay_rgb_setup(struct mdp4_overlay_pipe *pipe)
 
 	outpdw(rgb_base + 0x0050, format);/* MDP_RGB_SRC_FORMAT */
 	outpdw(rgb_base + 0x0054, pattern);/* MDP_RGB_SRC_UNPACK_PATTERN */
-	outpdw(rgb_base + 0x0058, pipe->op_mode);/* MDP_RGB_OP_MODE */
+	if (format & MDP4_FORMAT_SOLID_FILL) {
+		u32 op_mode = pipe->op_mode;
+		op_mode &= ~(MDP4_OP_FLIP_LR + MDP4_OP_SCALEX_EN);
+		op_mode &= ~(MDP4_OP_FLIP_UD + MDP4_OP_SCALEY_EN);
+		outpdw(rgb_base + 0x0058, op_mode);/* MDP_RGB_OP_MODE */
+	} else
+		outpdw(rgb_base + 0x0058, pipe->op_mode);/* MDP_RGB_OP_MODE */
 	outpdw(rgb_base + 0x005c, pipe->phasex_step);
 	outpdw(rgb_base + 0x0060, pipe->phasey_step);
 
@@ -585,7 +591,14 @@ void mdp4_overlay_vg_setup(struct mdp4_overlay_pipe *pipe)
 
 	outpdw(vg_base + 0x0050, format);	/* MDP_RGB_SRC_FORMAT */
 	outpdw(vg_base + 0x0054, pattern);	/* MDP_RGB_SRC_UNPACK_PATTERN */
-	outpdw(vg_base + 0x0058, pipe->op_mode);/* MDP_RGB_OP_MODE */
+	if (format & MDP4_FORMAT_SOLID_FILL) {
+		u32 op_mode = pipe->op_mode;
+		op_mode &= ~(MDP4_OP_FLIP_LR + MDP4_OP_SCALEX_EN);
+		op_mode &= ~(MDP4_OP_FLIP_UD + MDP4_OP_SCALEY_EN);
+		outpdw(vg_base + 0x0058, op_mode);/* MDP_RGB_OP_MODE */
+	} else
+		outpdw(vg_base + 0x0058, pipe->op_mode);/* MDP_RGB_OP_MODE */
+
 	outpdw(vg_base + 0x005c, pipe->phasex_step);
 	outpdw(vg_base + 0x0060, pipe->phasey_step);
 #ifdef OVDEBUG
@@ -1308,10 +1321,21 @@ void mdp4_mixer_blend_setup(struct mdp4_overlay_pipe *pipe)
 		outpdw(overlay_base + off + 0x108, pipe->alpha);
 		outpdw(overlay_base + off + 0x10c, 0xff - pipe->alpha);
 		if (pipe->alpha == 0xff) {
+			u32 op_mode;
 			rgb_base = MDP_BASE + MDP4_RGB_BASE;
 			rgb_base += MDP4_RGB_OFF * bg_pipe->pipe_num;
 			rgb_src_format = inpdw(rgb_base + 0x50);
 			rgb_src_format |= MDP4_FORMAT_SOLID_FILL;
+			/*
+			 * If solid fill is enabled, flip and scale
+			 * have to be disabled. otherwise, h/w
+			 * underruns.
+			 */
+			op_mode = inpdw(rgb_base + 0x0058);
+			op_mode &= ~(MDP4_OP_FLIP_LR + MDP4_OP_SCALEX_EN);
+			op_mode &= ~(MDP4_OP_FLIP_UD + MDP4_OP_SCALEY_EN);
+			outpdw(rgb_base + 0x0058, op_mode);
+
 			outpdw(rgb_base + 0x50, rgb_src_format);
 			outpdw(rgb_base + 0x1008, constant_color);
 		}
