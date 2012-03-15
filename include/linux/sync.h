@@ -16,6 +16,7 @@
 #include <linux/types.h>
 #ifdef __KERNEL__
 
+#include <linux/ktime.h>
 #include <linux/list.h>
 #include <linux/spinlock.h>
 #include <linux/wait.h>
@@ -84,12 +85,14 @@ struct sync_timeline {
 
 /**
  * struct sync_pt - sync point
- * @parent:             sync_timeline to which this sync_pt belongs
- * @child_list:         membership in sync_timeline.child_list_head
- * @active_list:        membership in sync_timeline.active_list_head
- * @fence:              sync_fence to which the sync_pt belongs
- * @pt_list:            membership in sync_fence.pt_list_head
- * @status:             1: signaled, 0:active, <0: error
+ * @parent:		sync_timeline to which this sync_pt belongs
+ * @child_list:		membership in sync_timeline.child_list_head
+ * @active_list:	membership in sync_timeline.active_list_head
+ * @fence:		sync_fence to which the sync_pt belongs
+ * @pt_list:		membership in sync_fence.pt_list_head
+ * @status:		1: signaled, 0:active, <0: error
+ * @timestamp:		time which sync_pt status transitioned from active to
+ *			  singaled or error.
  */
 struct sync_pt {
         struct sync_timeline            *parent;
@@ -100,8 +103,10 @@ struct sync_pt {
         struct sync_fence       *fence;
         struct list_head        pt_list;
 
-        /* protected by parent->active_list_lock */
-        int                     status;
+	/* protected by parent->active_list_lock */
+	int			status;
+
+	ktime_t			timestamp;
 };
 
 /**
