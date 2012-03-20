@@ -3377,12 +3377,14 @@ dhd_bus_start(dhd_pub_t *dhdp)
 #endif
 	}
 #endif
-	dhdp->pktfilter_count = 4;
+	dhdp->pktfilter_count = 5;
 	/* Setup filter to allow only unicast */
 	dhdp->pktfilter[0] = "100 0 0 0 0x01 0x00";
 	dhdp->pktfilter[1] = NULL;
 	dhdp->pktfilter[2] = NULL;
 	dhdp->pktfilter[3] = NULL;
+	dhdp->pktfilter[4] = "104 0 0 0 0xFFFFFFFFFFFF 0x01005E0000FB";
+
 
 #ifdef WRITE_MACADDR
 	dhd_write_macaddr(dhd->pub.mac.octet);
@@ -4979,7 +4981,8 @@ int net_os_rxfilter_add_remove(struct net_device *dev, int add_remove, int num)
 	char *filterp = NULL;
 	int ret = 0;
 
-	if (!dhd || (num == DHD_UNICAST_FILTER_NUM))
+	if (!dhd || (num == DHD_UNICAST_FILTER_NUM) ||
+	    (num == DHD_MDNS_FILTER_NUM))
 		return ret;
 	if (num >= dhd->pub.pktfilter_count)
 		return -EINVAL;
