@@ -81,6 +81,7 @@ enum {
 	MSM_SMSM_DEBUG = 1U << 1,
 	MSM_SMD_INFO = 1U << 2,
 	MSM_SMSM_INFO = 1U << 3,
+        MSM_SMx_POWER_INFO = 1U << 4,
 };
 
 struct smsm_shared_info {
@@ -145,10 +146,15 @@ module_param_named(debug_mask, msm_smd_debug_mask,
 		if (msm_smd_debug_mask & MSM_SMSM_INFO) \
 			printk(KERN_INFO "[SMD] "x);		\
 	} while (0)
+#define SMx_POWER_INFO(x...) do {				\
+		if (msm_smd_debug_mask & MSM_SMx_POWER_INFO) \
+			printk(KERN_INFO x);		\
+	} while (0)
 #else
 #define SMD_DBG(x...) do { } while (0)
 #define SMSM_DBG(x...) do { } while (0)
 #define SMD_INFO(x...) do { } while (0)
+#define SMx_POWER_INFO(x...) do { } while (0)
 #define SMSM_INFO(x...) do { } while (0)
 #endif
 
