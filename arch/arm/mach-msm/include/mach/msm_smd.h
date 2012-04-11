@@ -162,6 +162,19 @@ int smd_write_segment(smd_channel_t *ch, void *data, int len, int user_buf);
  */
 int smd_write_end(smd_channel_t *ch);
 
+/*
+ * Checks to see if a new packet has arrived on the channel.  Only to be
+ * called with interrupts disabled.
+ *
+ * @ch: channel to check if a packet has arrived
+ *
+ * Returns:
+ *      0 - packet not available
+ *      1 - packet available
+ *      -EINVAL - NULL parameter or non-packet based channel provided
+ */
+int smd_is_pkt_avail(smd_channel_t *ch);
+
 #else
 
 static inline int smd_open(const char *name, smd_channel_t **ch, void *priv,
@@ -260,6 +273,11 @@ smd_write_segment(smd_channel_t *ch, void *data, int len, int user_buf)
 }
 
 static inline int smd_write_end(smd_channel_t *ch)
+{
+	return -ENODEV;
+}
+
+static inline int smd_is_pkt_avail(smd_channel_t *ch)
 {
 	return -ENODEV;
 }
