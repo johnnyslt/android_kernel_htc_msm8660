@@ -264,6 +264,7 @@ static irqreturn_t smsm_irq_handler(int irq, void *data);
 static void smd_fake_irq_handler(unsigned long arg);
 static void smsm_cb_snapshot(uint32_t use_wakelock);
 
+static struct workqueue_struct *smsm_cb_wq;
 static void notify_smsm_cb_clients_worker(struct work_struct *work);
 static DECLARE_WORK(smsm_cb_work, notify_smsm_cb_clients_worker);
 static DEFINE_MUTEX(smsm_lock);
@@ -2027,6 +2028,13 @@ static int smsm_cb_init(void)
 		return -ENOMEM;
 	}
 
+	smsm_cb_wq = create_singlethread_workqueue("smsm_cb_wq");
+	if (!smsm_cb_wq) {
+		pr_err("%s: smsm_cb_wq creation failed\n", __func__);
+		kfree(smsm_states);
+		return -EFAULT;
+	}
+
 	mutex_lock(&smsm_lock);
 	for (n = 0; n < SMSM_NUM_ENTRIES; n++) {
 		state_info = &smsm_states[n];
@@ -2193,7 +2201,7 @@ static void smsm_cb_snapshot(uint32_t use_wakelock)
 		goto restore_snapshot_count;
 	}
 
-	schedule_work(&smsm_cb_work);
+	queue_work(smsm_cb_wq, &smsm_cb_work);
 	return;
 
 restore_snapshot_count:
@@ -2445,7 +2453,6 @@ void notify_smsm_cb_clients_worker(struct work_struct *work)
 				state_info->last_value = new_state;
 			}
 		}
-		mutex_unlock(&smsm_lock);
 
 		/* read wakelock flag */
 		ret = kfifo_out(&smsm_snapshot_fifo, &use_wakelock,
@@ -2453,8 +2460,10 @@ void notify_smsm_cb_clients_worker(struct work_struct *work)
 		if (ret != sizeof(use_wakelock)) {
 			pr_err("%s: snapshot underflow %d\n",
 				__func__, ret);
+			mutex_unlock(&smsm_lock);
 			return;
 		}
+		mutex_unlock(&smsm_lock);
 
 		if (use_wakelock) {
 			spin_lock_irqsave(&smsm_snapshot_count_lock, flags);
