@@ -210,7 +210,7 @@ static bool use_non_dfs_channels = true;
 #include <bcmsdbus.h>
 extern void dhd_customer_gpio_wlan_ctrl(int onoff);
 extern uint dhd_dev_reset(struct net_device *dev, uint8 flag);
-extern void dhd_dev_init_ioctl(struct net_device *dev);
+extern int dhd_dev_init_ioctl(struct net_device *dev);
 extern int wifi_get_cscan_enable(void);
 extern void dhd_reset_hang_was_sent(struct net_device *dev);
 
