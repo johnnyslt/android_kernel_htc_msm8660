@@ -54,6 +54,7 @@
 #include <mach/dma.h>
 #include <mach/htc_pwrsink.h>
 #include <mach/sdio_al.h>
+#include <mach/msm_bus.h>
 #include <linux/rtc.h>
 
 #ifdef CONFIG_PERFLOCK
@@ -85,6 +86,8 @@ static int msmsdcc_runtime_resume(struct device *dev);
 #define SPS_SDCC_CONSUMER_PIPE_INDEX	2
 #define SPS_CONS_PERIPHERAL		0
 #define SPS_PROD_PERIPHERAL		1
+
+#define MSM_MMC_BUS_VOTING_DELAY	200 /* msecs */
 
 #if defined(CONFIG_DEBUG_FS)
 static void msmsdcc_dbg_createhost(struct msmsdcc_host *);
@@ -2684,6 +2687,180 @@ static void msmsdcc_disable_irq_wake(struct msmsdcc_host *host)
 	}
 }
 
+/* Returns required bandwidth in Bytes per Sec */
+static unsigned int msmsdcc_get_bw_required(struct msmsdcc_host *host,
+					    struct mmc_ios *ios)
+{
+	unsigned int bw;
+
+	bw = host->clk_rate;
+	/*
+	 * For DDR mode, SDCC controller clock will be at
+	 * the double rate than the actual clock that goes to card.
+	 */
+	if (ios->bus_width == MMC_BUS_WIDTH_4)
+		bw /= 2;
+	else if (ios->bus_width == MMC_BUS_WIDTH_1)
+		bw /= 8;
+
+	return bw;
+}
+
+static int msmsdcc_msm_bus_get_vote_for_bw(struct msmsdcc_host *host,
+					   unsigned int bw)
+{
+	unsigned int *table = host->plat->msm_bus_voting_data->bw_vecs;
+	unsigned int size = host->plat->msm_bus_voting_data->bw_vecs_size;
+	int i;
+
+	if (host->msm_bus_vote.is_max_bw_needed && bw)
+		return host->msm_bus_vote.max_bw_vote;
+
+	for (i = 0; i < size; i++) {
+		if (bw <= table[i])
+			break;
+	}
+
+	if (i && (i == size))
+		i--;
+
+	return i;
+}
+
+static int msmsdcc_msm_bus_register(struct msmsdcc_host *host)
+{
+	int rc = 0;
+	struct msm_bus_scale_pdata *use_cases;
+
+	if (host->plat->msm_bus_voting_data &&
+	    host->plat->msm_bus_voting_data->use_cases &&
+	    host->plat->msm_bus_voting_data->bw_vecs &&
+	    host->plat->msm_bus_voting_data->bw_vecs_size) {
+		use_cases = host->plat->msm_bus_voting_data->use_cases;
+		host->msm_bus_vote.client_handle =
+				msm_bus_scale_register_client(use_cases);
+	} else {
+		return 0;
+	}
+
+	if (!host->msm_bus_vote.client_handle) {
+		pr_err("%s: msm_bus_scale_register_client() failed\n",
+		       mmc_hostname(host->mmc));
+		rc = -EFAULT;
+	} else {
+		/* cache the vote index for minimum and maximum bandwidth */
+		host->msm_bus_vote.min_bw_vote =
+				msmsdcc_msm_bus_get_vote_for_bw(host, 0);
+		host->msm_bus_vote.max_bw_vote =
+				msmsdcc_msm_bus_get_vote_for_bw(host, UINT_MAX);
+	}
+
+	return rc;
+}
+
+static void msmsdcc_msm_bus_unregister(struct msmsdcc_host *host)
+{
+	if (host->msm_bus_vote.client_handle)
+		msm_bus_scale_unregister_client(
+			host->msm_bus_vote.client_handle);
+}
+
+/*
+ * This function must be called with host lock acquired.
+ * Caller of this function should also ensure that msm bus client
+ * handle is not null.
+ */
+static inline int msmsdcc_msm_bus_set_vote(struct msmsdcc_host *host,
+					     int vote,
+					     unsigned long flags)
+{
+	int rc = 0;
+
+	if (vote != host->msm_bus_vote.curr_vote) {
+		spin_unlock_irqrestore(&host->lock, flags);
+		rc = msm_bus_scale_client_update_request(
+				host->msm_bus_vote.client_handle, vote);
+		if (rc)
+			pr_err("%s: msm_bus_scale_client_update_request() failed."
+			       " bus_client_handle=0x%x, vote=%d, err=%d\n",
+			       mmc_hostname(host->mmc),
+			       host->msm_bus_vote.client_handle, vote, rc);
+		spin_lock_irqsave(&host->lock, flags);
+		if (!rc)
+			host->msm_bus_vote.curr_vote = vote;
+	}
+
+	return rc;
+}
+
+/*
+ * Internal work. Work to set 0 bandwidth for msm bus.
+ */
+static void msmsdcc_msm_bus_work(struct work_struct *work)
+{
+	struct msmsdcc_host *host = container_of(work,
+					struct msmsdcc_host,
+					msm_bus_vote.vote_work.work);
+	unsigned long flags;
+
+	if (!host->msm_bus_vote.client_handle)
+		return;
+
+	spin_lock_irqsave(&host->lock, flags);
+	/* don't vote for 0 bandwidth if any request is in progress */
+	if (!host->curr.mrq)
+		msmsdcc_msm_bus_set_vote(host,
+			host->msm_bus_vote.min_bw_vote, flags);
+	else
+		pr_warning("%s: %s: SDCC transfer in progress. skipping"
+			   " bus voting to 0 bandwidth\n",
+			   mmc_hostname(host->mmc), __func__);
+	spin_unlock_irqrestore(&host->lock, flags);
+}
+
+/*
+ * This function cancels any scheduled delayed work
+ * and sets the bus vote based on ios argument.
+ * If "ios" argument is NULL, bandwidth required is 0 else
+ * calculate the bandwidth based on ios parameters.
+ */
+static void msmsdcc_msm_bus_cancel_work_and_set_vote(
+					struct msmsdcc_host *host,
+					struct mmc_ios *ios)
+{
+	unsigned long flags;
+	unsigned int bw;
+	int vote;
+
+	if (!host->msm_bus_vote.client_handle)
+		return;
+
+	bw = ios ? msmsdcc_get_bw_required(host, ios) : 0;
+
+	cancel_delayed_work_sync(&host->msm_bus_vote.vote_work);
+	spin_lock_irqsave(&host->lock, flags);
+	vote = msmsdcc_msm_bus_get_vote_for_bw(host, bw);
+	msmsdcc_msm_bus_set_vote(host, vote, flags);
+	spin_unlock_irqrestore(&host->lock, flags);
+}
+
+/* This function queues a work which will set the bandwidth requiement to 0 */
+static void msmsdcc_msm_bus_queue_work(struct msmsdcc_host *host)
+{
+	unsigned long flags;
+
+	if (!host->msm_bus_vote.client_handle)
+		return;
+
+	spin_lock_irqsave(&host->lock, flags);
+	if (host->msm_bus_vote.min_bw_vote != host->msm_bus_vote.curr_vote)
+		queue_delayed_work(system_nrt_wq,
+				   &host->msm_bus_vote.vote_work,
+				   msecs_to_jiffies(MSM_MMC_BUS_VOTING_DELAY));
+	spin_unlock_irqrestore(&host->lock, flags);
+}
+
+
 static void
 msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 {
@@ -3035,16 +3212,16 @@ static int msmsdcc_enable(struct mmc_host *mmc)
 
 	// To avoid duplicated entry
 	if (mmc->card && mmc_card_sdio(mmc->card) && host->is_resumed)
-		return 0;
+		goto out;
 
-#if 0
+
 	if (dev->power.runtime_status == RPM_SUSPENDING) {
 		if (mmc->suspend_task == current) {
 			pm_runtime_get_noresume(dev);
 			goto out;
 		}
 	}
-#endif
+
 	if (!pm_runtime_enabled(dev))
 		return 0;
 	rc = pm_runtime_get_sync(dev);
@@ -3056,9 +3233,9 @@ static int msmsdcc_enable(struct mmc_host *mmc)
 	}
 
 	host->is_resumed = true;
-#if 0
+
 out:
-#endif
+  msmsdcc_msm_bus_cancel_work_and_set_vote(host, &mmc->ios);
 	return 0;
 }
 
@@ -3069,10 +3246,12 @@ static int msmsdcc_disable(struct mmc_host *mmc, int lazy)
 	struct msmsdcc_host *host = mmc_priv(mmc);
 
 	msmsdcc_pm_qos_update_latency(host, 0);
-#if 0
-	if (mmc->card && mmc_card_sdio(mmc->card))
-		return 0;
-#endif
+
+	if (mmc->card && mmc_card_sdio(mmc->card)) {
+		rc = 0;
+		goto out;
+	}
+
 	if (host->plat->disable_runtime_pm)
 		return -ENOTSUPP;
 
@@ -3086,7 +3265,8 @@ static int msmsdcc_disable(struct mmc_host *mmc, int lazy)
 				__func__, rc);
 	else
 		host->is_resumed = false;
-
+out:
+	msmsdcc_msm_bus_queue_work(host);
 	return rc;
 }
 #else
@@ -3097,6 +3277,11 @@ static int msmsdcc_enable(struct mmc_host *mmc)
 
 	msmsdcc_pm_qos_update_latency(host, 1);
 
+	if (mmc->card && mmc_card_sdio(mmc->card)) {
+		rc = 0;
+		goto out;
+	}
+
 	spin_lock_irqsave(&host->lock, flags);
 	if (!host->clks_on) {
 		msmsdcc_setup_clocks(host, true);
@@ -3104,6 +3289,8 @@ static int msmsdcc_enable(struct mmc_host *mmc)
 	}
 	spin_unlock_irqrestore(&host->lock, flags);
 
+out:
+	msmsdcc_msm_bus_cancel_work_and_set_vote(host, &mmc->ios);
 	return 0;
 }
 
@@ -3115,7 +3302,7 @@ static int msmsdcc_disable(struct mmc_host *mmc, int lazy)
 	msmsdcc_pm_qos_update_latency(host, 0);
 
 	if (mmc->card && mmc_card_sdio(mmc->card))
-		return 0;
+		goto out;
 
 	spin_lock_irqsave(&host->lock, flags);
 	if (host->clks_on) {
@@ -3123,7 +3310,8 @@ static int msmsdcc_disable(struct mmc_host *mmc, int lazy)
 		host->clks_on = 0;
 	}
 	spin_unlock_irqrestore(&host->lock, flags);
-
+out:
+	msmsdcc_msm_bus_queue_work(host);
 	return 0;
 }
 #endif
@@ -4167,10 +4355,46 @@ set_polling(struct device *dev, struct device_attribute *attr,
 
 static DEVICE_ATTR(polling, S_IRUGO | S_IWUSR,
 		show_polling, set_polling);
+
+static ssize_t
+show_sdcc_to_mem_max_bus_bw(struct device *dev, struct device_attribute *attr,
+			char *buf)
+{
+	struct mmc_host *mmc = dev_get_drvdata(dev);
+	struct msmsdcc_host *host = mmc_priv(mmc);
+
+	return snprintf(buf, PAGE_SIZE, "%u\n",
+		host->msm_bus_vote.is_max_bw_needed);
+}
+
+static ssize_t
+set_sdcc_to_mem_max_bus_bw(struct device *dev, struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct mmc_host *mmc = dev_get_drvdata(dev);
+	struct msmsdcc_host *host = mmc_priv(mmc);
+	uint32_t value;
+	unsigned long flags;
+
+	if (!kstrtou32(buf, 0, &value)) {
+		spin_lock_irqsave(&host->lock, flags);
+		host->msm_bus_vote.is_max_bw_needed = !!value;
+		spin_unlock_irqrestore(&host->lock, flags);
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR(max_bus_bw, S_IRUGO | S_IWUSR,
+		show_sdcc_to_mem_max_bus_bw, set_sdcc_to_mem_max_bus_bw);
+
 static struct attribute *dev_attrs[] = {
-	&dev_attr_polling.attr,
+	&dev_attr_max_bus_bw.attr,
+	/* if polling is enabled, this will be filled with dev_attr_polling */
+	NULL,
 	NULL,
 };
+
 static struct attribute_group dev_attr_grp = {
 	.attrs = dev_attrs,
 };
@@ -4558,6 +4782,14 @@ msmsdcc_probe(struct platform_device *pdev)
 		pm_qos_add_request(&host->pm_qos_req_dma,
 			PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
 
+	ret = msmsdcc_msm_bus_register(host);
+	if (ret)
+	goto pm_qos_remove;
+
+	if (host->msm_bus_vote.client_handle)
+		INIT_DELAYED_WORK(&host->msm_bus_vote.vote_work,
+			msmsdcc_msm_bus_work);
+
 #ifdef CONFIG_WIMAX
 	#if SDC_CLK_VERBOSE
 	if (is_wimax_platform(host->plat) && mmc_wimax_get_status()) {
@@ -4841,11 +5073,12 @@ msmsdcc_probe(struct platform_device *pdev)
 #if defined(CONFIG_DEBUG_FS)
 	msmsdcc_dbg_createhost(host);
 #endif
-	if (!plat->status_irq) {
-		ret = sysfs_create_group(&pdev->dev.kobj, &dev_attr_grp);
-		if (ret)
-			goto platform_irq_free;
-	}
+	if (!plat->status_irq)
+		dev_attrs[1] = &dev_attr_polling.attr;
+
+	ret = sysfs_create_group(&pdev->dev.kobj, &dev_attr_grp);
+	if (ret)
+		goto platform_irq_free;
 	return 0;
 
  platform_irq_free:
@@ -4875,6 +5108,8 @@ msmsdcc_probe(struct platform_device *pdev)
 	msmsdcc_vreg_init(host, false);
  clk_disable:
 	clk_disable(host->clk);
+	msmsdcc_msm_bus_unregister(host);
+ pm_qos_remove:
 	if (host->plat->swfi_latency)
 		pm_qos_remove_request(&host->pm_qos_req_dma);
  clk_put:
@@ -4951,6 +5186,11 @@ static int msmsdcc_remove(struct platform_device *pdev)
 
 	if (host->plat->swfi_latency)
 		pm_qos_remove_request(&host->pm_qos_req_dma);
+
+	if (host->msm_bus_vote.client_handle) {
+		msmsdcc_msm_bus_cancel_work_and_set_vote(host, NULL);
+		msmsdcc_msm_bus_unregister(host);
+	}
 
 	msmsdcc_vreg_init(host, false);
 
@@ -5071,8 +5311,10 @@ static int msmsdcc_suspend(struct device *dev)
 	}
 #endif
 
-	if (host->plat->is_sdio_al_client)
-		return 0;
+	if (host->plat->is_sdio_al_client) {
+		rc = 0;
+		goto out;
+	}
 	pr_debug("%s: %s: start\n", mmc_hostname(mmc), __func__);
 	if (mmc) {
 		host->sdcc_suspending = 1;
@@ -5172,7 +5414,10 @@ static int msmsdcc_suspend(struct device *dev)
 		if (rc && wake_lock_active(&host->sdio_suspend_wlock))
 			wake_unlock(&host->sdio_suspend_wlock);
 	}
-	pr_debug("%s: %s: end\n", mmc_hostname(mmc), __func__);
+	pr_debug("%s: %s: ends with err=%d\n", mmc_hostname(mmc), __func__, rc);
+out:
+	/* set bus bandwidth to 0 immediately */
+	msmsdcc_msm_bus_cancel_work_and_set_vote(host, NULL);
 	return rc;
 }
 

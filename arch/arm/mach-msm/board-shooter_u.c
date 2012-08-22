@@ -117,6 +117,7 @@
 #include "cpuidle.h"
 #include "pm.h"
 #include "pm-boot.h"
+#include "board-storage-common-a.h"
 #include "mpm.h"
 #include "spm.h"
 #include "rpm_log.h"
@@ -6014,6 +6015,7 @@ static struct mmc_platform_data msm8x60_sdc1_data = {
 	.msmsdcc_fmax	= 48000000,
 	.nonremovable	= 1,
 	.pclk_src_dfab	= 1,
+	.msm_bus_voting_data = &sps_to_ddr_bus_voting_data,
 };
 #endif
 
@@ -6030,6 +6032,7 @@ static struct mmc_platform_data msm8x60_sdc2_data = {
 	.nonremovable	= 0,
 	.pclk_src_dfab  = 1,
 	.register_status_notify = sdc2_register_status_notify,
+	.msm_bus_voting_data = &sps_to_ddr_bus_voting_data,
 };
 #endif
 #endif
@@ -6055,6 +6058,7 @@ static struct mmc_platform_data msm8x60_sdc3_data = {
 	.msmsdcc_fmax	= 48000000,
 	.nonremovable	= 0,
 	.pclk_src_dfab  = 1,
+	.msm_bus_voting_data = &sps_to_ddr_bus_voting_data,
 };
 #endif
 
@@ -6070,6 +6074,7 @@ static struct mmc_platform_data msm8x60_sdc5_data = {
 	.nonremovable	= 0,
 	.pclk_src_dfab  = 1,
 	.register_status_notify = sdc5_register_status_notify,
+	.msm_bus_voting_data = &sps_to_ddr_bus_voting_data,
 };
 #endif
 
