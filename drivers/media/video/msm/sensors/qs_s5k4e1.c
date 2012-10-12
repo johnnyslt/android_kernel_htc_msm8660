@@ -356,7 +356,7 @@ static int32_t qs_s5k4e1_eeprom_i2c_read_b(unsigned short raddr,
 	unsigned short *rdata, int rlen)
 {
 	int32_t rc = 0;
-	unsigned char buf[2];
+	unsigned char buf[2] = {0, 0};
 	rc = qs_s5k4e1_eeprom_i2c_read(raddr, &buf[0], rlen);
 	*rdata = (rlen == 2 ? buf[0] << 8 | buf[1] : buf[0]);
 	/*pr_info("qs_s5k4e1_eeprom_i2c_read 0x%x val = 0x%x!\n", raddr, *rdata);*/

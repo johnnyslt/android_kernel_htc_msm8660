@@ -2251,7 +2251,7 @@ static int hub_port_reset(struct usb_hub *hub, int port1,
 static int hub_port_warm_reset(struct usb_hub *hub, int port)
 {
 	int ret;
-	u16 portstatus, portchange;
+	u16 portstatus = 0, portchange = 0;
 
 	if (!hub_is_superspeed(hub->hdev)) {
 		dev_err(hub->intfdev, "only USB3 hub support warm reset\n");

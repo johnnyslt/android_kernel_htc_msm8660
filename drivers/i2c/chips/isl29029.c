@@ -395,7 +395,7 @@ static void report_psensor_input_event(struct isl29029_info *lpi,
 
 static void report_lsensor_input_event(struct isl29029_info *lpi)
 {
-	uint16_t adc_value, raw_adc_value;
+	uint16_t adc_value, raw_adc_value = 0;
 	int level = 0, i, ret;
 
 	adc_value = get_ls_adc_value(&raw_adc_value);
@@ -612,7 +612,7 @@ static void info_do_work(struct work_struct *w)
 	uint16_t value, TH1_value, TH2_value, TH3_value;
 	uint16_t PROX_LT, PROX_HT;
 	char buffer[4] = "";
-	uint16_t adc_value, raw_adc_value;
+	uint16_t adc_value, raw_adc_value = 0;
 	uint16_t value_of_test1, value_of_test2;
 
 	buffer[0] = ISL29029_TEST1;

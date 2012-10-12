@@ -3767,7 +3767,7 @@ int generic_access_phys(struct vm_area_struct *vma, unsigned long addr,
 static int __access_remote_vm(struct task_struct *tsk, struct mm_struct *mm,
 		unsigned long addr, void *buf, int len, int write)
 {
-	struct vm_area_struct *vma;
+	struct vm_area_struct *vma = NULL;
 	void *old_buf = buf;
 
 	down_read(&mm->mmap_sem);
