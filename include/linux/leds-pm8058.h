@@ -88,4 +88,8 @@ struct pm8058_led_data {
 	int out_current;
 };
 void button_backlight_flash (int brightness_key);
+
+extern void pm8058_drvx_led_brightness_set(struct led_classdev *led_cdev,
+		enum led_brightness brightness);
+
 #endif /* _LINUX_LEDS_PM8058_H */
