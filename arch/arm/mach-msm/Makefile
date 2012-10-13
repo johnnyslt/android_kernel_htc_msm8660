@@ -373,6 +373,7 @@ obj-$(CONFIG_MACH_DOUBLESHOT) += board-doubleshot-audio.o
 obj-$(CONFIG_MACH_DOUBLESHOT) += board-doubleshot-microp.o
 obj-$(CONFIG_MACH_DOUBLESHOT) += htc_bdaddress.o board-doubleshot-rfkill.o
 obj-$(CONFIG_MACH_DOUBLESHOT) += board-doubleshot-mmc.o board-doubleshot-wifi.o
+obj-$(CONFIG_FORCE_FAST_CHARGE) += fastchg.o
 obj-$(CONFIG_MACH_SHOOTER) += board-shooter.o
 obj-$(CONFIG_MACH_SHOOTER) += board-shooter-keypad.o
 obj-$(CONFIG_MACH_SHOOTER) += board-shooter-audio.o
