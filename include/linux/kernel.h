@@ -37,6 +37,8 @@
 
 #define STACK_MAGIC	0xdeadbeef
 
+#define REPEAT_BYTE(x)	((~0ul / 0xff) * (x))
+
 #define ALIGN(x, a)		__ALIGN_KERNEL((x), (a))
 #define __ALIGN_MASK(x, mask)	__ALIGN_KERNEL_MASK((x), (mask))
 #define PTR_ALIGN(p, a)		((typeof(p))ALIGN((unsigned long)(p), (a)))
@@ -76,6 +78,19 @@
 	(((x) + ((__divisor) / 2)) / (__divisor));	\
 }							\
 )
+
+/*
+ * Multiplies an integer by a fraction, while avoiding unnecessary
+ * overflow or loss of precision.
+ */
+#define mult_frac(x, numer, denom)(			\
+{							\
+	typeof(x) quot = (x) / (denom);			\
+	typeof(x) rem  = (x) % (denom);			\
+	(quot * (numer)) + ((rem * (numer)) / (denom));	\
+}							\
+)
+
 
 /*
  * Multiplies an integer by a fraction, while avoiding unnecessary
@@ -300,6 +315,8 @@ extern long long simple_strtoll(const char *,char **,unsigned int);
 #define strict_strtol	kstrtol
 #define strict_strtoull	kstrtoull
 #define strict_strtoll	kstrtoll
+
+extern int num_to_str(char *buf, int size, unsigned long long num);
 
 extern int sprintf(char * buf, const char * fmt, ...)
 	__attribute__ ((format (printf, 2, 3)));
