@@ -67,6 +67,9 @@
 #define L_VAL_SCPLL_CAL_MIN	0x08 /* =  432 MHz with 27MHz source */
 
 #define MAX_VDD_SC		1325000 /* uV */
+#ifdef CONFIG_CPU_VOLTAGE_TABLE
+#define MIN_VDD_SC		1000000 /* uV */
+#endif
 #define MAX_VDD_MEM		1325000 /* uV */
 #define MAX_VDD_DIG		1200000 /* uV */
 #define MAX_AXI			 310500 /* KHz */
@@ -777,6 +780,35 @@ unsigned int get_max_cpu_freq(void)
 		;
 	f--;
 	return f->acpuclk_khz;;
+}
+#endif
+
+#ifdef CONFIG_CPU_VOLTAGE_TABLE
+ssize_t acpuclk_get_vdd_levels_str(char *buf) {
+	int i, len = 0;
+	if (buf) {
+		mutex_lock(&drv_state.lock);
+		for (i = 0; acpu_freq_tbl[i].acpuclk_khz; i++) {
+			len += sprintf(buf + len, "%8u: %8d\n", acpu_freq_tbl[i].acpuclk_khz, acpu_freq_tbl[i].vdd_sc );
+		}
+		mutex_unlock(&drv_state.lock);
+	}
+	return len;
+}
+void acpuclk_set_vdd(unsigned int khz, int vdd_uv) {
+	int i;
+	unsigned int new_vdd_uv;
+	mutex_lock(&drv_state.lock);
+	for (i = 0; acpu_freq_tbl[i].acpuclk_khz; i++) {
+		if (khz == 0)
+			new_vdd_uv = min(max((acpu_freq_tbl[i].vdd_sc + vdd_uv), (unsigned int)MIN_VDD_SC), (unsigned int)MAX_VDD_SC);
+		else if ( acpu_freq_tbl[i].acpuclk_khz == khz)
+			new_vdd_uv = min(max((unsigned int)vdd_uv, (unsigned int)MIN_VDD_SC), (unsigned int)MAX_VDD_SC);
+		else 
+			continue;
+		acpu_freq_tbl[i].vdd_sc = new_vdd_uv;
+	}
+	mutex_unlock(&drv_state.lock);
 }
 #endif
 
