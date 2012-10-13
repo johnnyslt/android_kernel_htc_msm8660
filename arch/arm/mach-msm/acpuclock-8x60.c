@@ -66,12 +66,12 @@
  * Calibration should respect this limit. */
 #define L_VAL_SCPLL_CAL_MIN	0x08 /* =  432 MHz with 27MHz source */
 
-#define MAX_VDD_SC		1325000 /* uV */
+#define MAX_VDD_SC		1450000 /* uV */
 #ifdef CONFIG_CPU_VOLTAGE_TABLE
-#define MIN_VDD_SC		1000000 /* uV */
+#define MIN_VDD_SC		 700000 /* uV */
 #endif
-#define MAX_VDD_MEM		1325000 /* uV */
-#define MAX_VDD_DIG		1200000 /* uV */
+#define MAX_VDD_MEM		1450000 /* uV */
+#define MAX_VDD_DIG		1450000 /* uV */
 #define MAX_AXI			 310500 /* KHz */
 #define SCPLL_LOW_VDD_FMAX	 594000 /* KHz */
 #define SCPLL_LOW_VDD		1000000 /* uV */
