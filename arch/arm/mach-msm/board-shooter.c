@@ -139,6 +139,13 @@
 int set_two_phase_freq(int cpufreq);
 #endif
 
+#ifdef CONFIG_CMDLINE_OPTIONS
+	/* setters for cmdline_gpu */
+	int set_kgsl_3d0_freq(unsigned int freq0, unsigned int freq1);
+	int set_kgsl_2d0_freq(unsigned int freq);
+	int set_kgsl_2d1_freq(unsigned int freq);
+#endif
+
 int __init pyd_init_panel(struct resource *res, size_t size);
 
 enum {
@@ -6633,6 +6640,13 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 				     msm_num_footswitch_devices);
 	platform_add_devices(shooter_devices,
 			     ARRAY_SIZE(shooter_devices));
+
+#ifdef CONFIG_CMDLINE_OPTIONS
+	/* setters for cmdline_gpu */
+	set_kgsl_3d0_freq(cmdline_3dgpu[0], cmdline_3dgpu[1]);
+	set_kgsl_2d0_freq(cmdline_2dgpu);
+	set_kgsl_2d1_freq(cmdline_2dgpu);
+#endif
 
 	/* usb driver won't be loaded in MFG 58 station */
 	if (board_mfg_mode() != 6)
