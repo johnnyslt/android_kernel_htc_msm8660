@@ -246,6 +246,11 @@ static struct clkctl_acpu_speed acpu_freq_tbl_freq[] = {
   { {1, 1}, 1404000,  ACPU_SCPLL, 0, 0, 1, 0x1A, L2(19), 1200000, 0x03006000},
   { {1, 1}, 1458000,  ACPU_SCPLL, 0, 0, 1, 0x1B, L2(19), 1200000, 0x03006000},
   { {1, 1}, 1512000,  ACPU_SCPLL, 0, 0, 1, 0x1C, L2(19), 1250000, 0x03006000},
+  { {1, 1}, 1536000,  ACPU_SCPLL, 0, 0, 1, 0x1D, L2(19), 1250000, 0x03006000},
+  { {1, 1}, 1566000,  ACPU_SCPLL, 0, 0, 1, 0x1E, L2(19), 1250000, 0x03006000},
+  { {1, 1}, 1620000,  ACPU_SCPLL, 0, 0, 1, 0x1F, L2(19), 1250000, 0x03006000},
+  { {1, 1}, 1674000,  ACPU_SCPLL, 0, 0, 1, 0x20, L2(19), 1300000, 0x03006000},
+  { {1, 1}, 1728000,  ACPU_SCPLL, 0, 0, 1, 0x21, L2(19), 1350000, 0x03006000},
   { {0, 0}, 0 },
 };
 
@@ -847,8 +852,8 @@ uint32_t acpu_check_khz_value(unsigned long khz)
 {
 	struct clkctl_acpu_speed *f;
 
-	if (khz > 1512000)
-		return 1512000;
+	if (khz > 1728000)
+		return 1728000;
 
 	if (khz < 192000)
 		return 192000;
