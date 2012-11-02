@@ -11,6 +11,15 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * ATMEL sweep2wake mods based off of showp1984's cypress mod
+ * Ported to ATMEL by Chad Goodman   4/2012 for Gingerbread (Linux 2.6)
+ * Adopted for ICS 5/2012 (Linux 3.0) by Chad Goodman
+ * SYSFS support for Off/On/On +backlight by 6/2012 by Chad Goodman
+ * SYSFS start and end points by Chad Goodman
+ * Copyright (C) 2012 Chad Goodman <chad.goodman@gmail.com> , All Rights Reserved
+ *
+ * AOSP Multitouch fix by Agrabren 10/2012
+ *
  */
 
 #include <linux/module.h>
@@ -162,8 +171,8 @@ static button buttons[] = {
 			{915, "SEARCH"}
 };
 				
-int s2w_startbutton = 0;
-int s2w_endbutton = 0;
+int s2w_startbutton = -1;
+int s2w_endbutton = -1;
 
 int sweep2wake_buttonset(const char * button_name) {
 	int i = 0;	
@@ -190,6 +199,55 @@ int sweep2wake_buttonset(const char * button_name) {
 
 	return future_button;
 }
+
+#ifdef CONFIG_CMDLINE_OPTIONS
+static int __init atmel_read_s2w_cmdline(char *s2w)
+{
+	if (strcmp(s2w, "2") == 0) {
+		printk(KERN_INFO "[SWEEP2WAKE]: Sweep2Wake enabled with backlight. | s2w='%s'", s2w);
+		s2w_switch = 2;
+		s2w_temp = 2;
+	} else if (strcmp(s2w, "1") == 0) {
+		printk(KERN_INFO "[SWEEP2WAKE]: Sweep2Wake enabled without backlight. | s2w='%s'", s2w);
+		s2w_switch = 1;
+		s2w_temp = 1;
+	} else if (strcmp(s2w, "0") == 0) {
+		printk(KERN_INFO "[SWEEP2WAKE]: Sweep2Wake disabled. | s2w='%s'", s2w);
+		s2w_switch = 0;
+		s2w_temp = 0;
+	} else {
+		printk(KERN_INFO "[SWEEP2WAKE]: No valid input found. Sweep2Wake disabled. | s2w='%s'", s2w);
+		s2w_switch = 0;
+		s2w_temp = 0;
+	}
+	return 1;
+}
+__setup("s2w=", atmel_read_s2w_cmdline);
+
+static int __init atmel_read_s2w_start_cmdline(char *s2w_start)
+{
+	s2w_startbutton = sweep2wake_buttonset(s2w_start);
+	if (s2w_startbutton > 0) {
+		printk(KERN_INFO "[SWEEP2WAKE]: Sweep2Wake start button set to %s. | s2w_start='%s'", s2w_start, s2w_start);
+	} else {
+		printk(KERN_INFO "[SWEEP2WAKE]: No valid input found for start button. | s2w_start='%s'", s2w_start);
+	}
+	return 1;
+}
+__setup("s2w_start=", atmel_read_s2w_start_cmdline);
+
+static int __init atmel_read_s2w_end_cmdline(char *s2w_end)
+{
+	s2w_endbutton = sweep2wake_buttonset(s2w_end);
+	if (s2w_endbutton > 0) {
+		printk(KERN_INFO "[SWEEP2WAKE]: Sweep2Wake end button set to %s. | s2w_end='%s'", s2w_end, s2w_end);
+	} else {
+		printk(KERN_INFO "[SWEEP2WAKE]: No valid input found for end button. | s2w_end='%s'", s2w_end);
+	}
+	return 1;
+}
+__setup("s2w_end=", atmel_read_s2w_end_cmdline);
+#endif
 
 extern void sweep2wake_setdev(struct input_dev * input_device) {
 	sweep2wake_pwrdev = input_device;
@@ -2681,8 +2739,15 @@ static int atmel_ts_probe(struct i2c_client *client,
 #endif
 
 #ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
-	s2w_startbutton = sweep2wake_buttonset(CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE_START);
-	s2w_endbutton = sweep2wake_buttonset(CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE_END);
+#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE_START
+	if (s2w_startbutton <= 0)
+		s2w_startbutton = sweep2wake_buttonset(CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE_START);
+#endif /* CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE_START */
+#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE_END
+	if (s2w_endbutton <= 0)
+		s2w_endbutton = sweep2wake_buttonset(CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE_END);
+#endif /* CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE_END */
+
 	barrier1 = s2w_startbutton - 100; //0;
 	barrier2 = ((s2w_endbutton - s2w_startbutton) / 4) + s2w_startbutton; //333;
 	barrier3 = (((s2w_endbutton - s2w_startbutton) / 4) * 3) + s2w_startbutton; //667;
