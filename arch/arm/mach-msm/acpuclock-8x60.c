@@ -220,7 +220,7 @@ static struct clkctl_l2_speed l2_freq_tbl_v2[] = {
 
 #define L2(x) (&l2_freq_tbl_v2[(x)])
 /* SCPLL frequencies = 2 * 27 MHz * L_VAL */
-static struct clkctl_acpu_speed acpu_freq_tbl_anthrax[] = {
+static struct clkctl_acpu_speed acpu_freq_tbl_freq[] = {
   { {1, 1},  192000,  ACPU_PLL_8, 3, 1, 0, 0,    L2(1),   812500, 0x03006000},
   /* MAX_AXI row is used to source CPU cores and L2 from the AFAB clock. */
   { {0, 0},  MAX_AXI, ACPU_AFAB,  1, 0, 0, 0,    L2(0),   875000, 0x03006000},
@@ -853,7 +853,7 @@ uint32_t acpu_check_khz_value(unsigned long khz)
 	if (khz < 192000)
 		return 192000;
 
-	for (f = acpu_freq_tbl_anthrax; f->acpuclk_khz != 0; f++) {
+	for (f = acpu_freq_tbl_freq; f->acpuclk_khz != 0; f++) {
 		if (khz < 192000) {
 			if (f->acpuclk_khz == (khz*1000))
 				return f->acpuclk_khz;
@@ -889,7 +889,7 @@ static __init struct clkctl_acpu_speed *select_freq_plan(void)
 	struct clkctl_acpu_speed *f;
 
 	max_khz = cmdline_maxkhz;
-	acpu_freq_tbl = acpu_freq_tbl_anthrax;
+	acpu_freq_tbl = acpu_freq_tbl_freq;
 
 	/* Truncate the table based to max_khz. */
 	for (f = acpu_freq_tbl; f->acpuclk_khz != 0; f++) {
@@ -918,11 +918,11 @@ int processor_name_read_proc(char *page, char **start, off_t off,
 #ifdef CONFIG_CMDLINE_OPTIONS
 	if (cmdline_maxkhz) {
 		p += sprintf(p, "%u", (cmdline_maxkhz/1000));
-		p += sprintf(p, "MHz Anthrax'ed Dual Core");
+		p += sprintf(p, "MHz Dual Core");
 	} else {
 #endif
 		p += sprintf(p, "%u", (CONFIG_MSM_CPU_FREQ_MAX/1000));
-		p += sprintf(p, "MHz Anthrax'ed Dual Core");
+		p += sprintf(p, "MHz Dual Core");
 #ifdef CONFIG_CMDLINE_OPTIONS
 	}
 #endif

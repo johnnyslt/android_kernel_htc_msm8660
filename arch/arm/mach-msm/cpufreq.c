@@ -249,7 +249,7 @@ static void msm_cpufreq_early_suspend(struct early_suspend *h)
 			if (curfreq > cmdline_maxscroff) {
 				acpuclk_set_rate(cpu, cmdline_maxscroff, SETRATE_CPUFREQ);
 				curfreq = acpuclk_get_rate(cpu);
-				printk(KERN_INFO "[AnthraX-SCREEN_OFF]: Limited freq to '%u'\n", curfreq);
+				printk(KERN_INFO "[SCREEN_OFF]: Limited freq to '%u'\n", curfreq);
 			}
 		}
 		mutex_unlock(&per_cpu(cpufreq_suspend, cpu).suspend_mutex);
@@ -271,7 +271,7 @@ static void msm_cpufreq_late_resume(struct early_suspend *h)
 			if (curfreq != cpu_work->frequency) {
 				acpuclk_set_rate(cpu, cpu_work->frequency, SETRATE_CPUFREQ);
 				curfreq = acpuclk_get_rate(cpu);
-				printk(KERN_INFO "[AnthraX-SCREEN_ON]: Unlocking freq to '%u'\n", curfreq);
+				printk(KERN_INFO "[SCREEN_ON]: Unlocking freq to '%u'\n", curfreq);
 			}
 		}
 		mutex_unlock(&per_cpu(cpufreq_suspend, cpu).suspend_mutex);
