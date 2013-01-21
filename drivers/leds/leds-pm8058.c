@@ -29,6 +29,7 @@
 
 #ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
 #include <linux/atmel_qt602240.h>
+#endif
 
 #ifdef CONFIG_LEDS_PM8058_MULTIPLIER
 #include <linux/leds-pm8058-multiplier.h>
