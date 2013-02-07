@@ -574,11 +574,12 @@ extern int wl_pattern_atoh(char *src, char *dst);
 /* HTC_CSP_END */
 static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 {
+	int is_screen_off = value;
+	int ret = 0;
 /* HTC_CSP_START */
 #ifdef BCM4329_LOW_POWER
 	int ignore_bcmc = 1;
 	char iovbuf[32];
-	int is_screen_off = value;
 #endif
 /* HTC_CSP_END */
 
@@ -606,7 +607,10 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 				/* ignore broadcast and multicast packet*/
 				bcm_mkiovar("pm_ignore_bcmc", (char *)&ignore_bcmc,
 					4, iovbuf, sizeof(iovbuf));
-				dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
+				ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
+				if (ret < 0) {
+					DHD_ERROR(("%s: can't set pm_ignore , error=%d\n", __func__, ret));					
+				}				
 				/* keep alive packet*/
 				dhd_set_keepalive(1);
 		      }
@@ -616,6 +620,8 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 				/* Kernel suspended */
 				DHD_TRACE(("%s: force extra Suspend setting \n", __FUNCTION__));
 
+				/* Enable packet filter, only allow unicast packet to send up */
+				dhd_set_packet_filter(1, dhd);
 #ifdef PNO_SUPPORT
 				/* set pfn */
 				dhd_set_pfn(dhd, 1);
@@ -638,6 +644,8 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 				/* Kernel resumed  */
 				DHD_TRACE(("%s: Remove extra suspend setting \n", __FUNCTION__));
 
+				/* disable pkt filter */
+				dhd_set_packet_filter(0, dhd);
 #ifdef PNO_SUPPORT
 				dhd_set_pfn(dhd, 0);
 #endif
@@ -3357,11 +3365,14 @@ dhd_bus_start(dhd_pub_t *dhdp)
 		dhd_set_pktfilter(dhdp, 1, ALLOW_IPV6_MULTICAST, 0, "0xffff", "0x3333");
 #endif
 	}
-#else
-	dhdp->pktfilter_count = 1;
+#endif
+	dhdp->pktfilter_count = 4;
 	/* Setup filter to allow only unicast */
 	dhdp->pktfilter[0] = "100 0 0 0 0x01 0x00";
-#endif
+	dhdp->pktfilter[1] = NULL;
+	dhdp->pktfilter[2] = NULL;
+	dhdp->pktfilter[3] = NULL;
+
 #ifdef WRITE_MACADDR
 	dhd_write_macaddr(dhd->pub.mac.octet);
 #endif
