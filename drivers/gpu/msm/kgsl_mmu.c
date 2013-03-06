@@ -17,7 +17,6 @@
 #include <linux/slab.h>
 #include <linux/sched.h>
 #include <linux/iommu.h>
-#include <mach/socinfo.h>
 
 #include "kgsl.h"
 #include "kgsl_mmu.h"
@@ -148,9 +147,10 @@ sysfs_show_va_range(struct kobject *kobj,
 
 	pt = _get_pt_from_kobj(kobj);
 
-	if (pt)
+	if (pt) {
 		ret += snprintf(buf, PAGE_SIZE, "0x%x\n",
-			CONFIG_MSM_KGSL_PAGE_TABLE_SIZE);
+			kgsl_mmu_get_ptsize());
+	}
 
 	kgsl_put_pagetable(pt);
 	return ret;
@@ -268,6 +268,22 @@ err:
 	return ret;
 }
 
+unsigned int kgsl_mmu_get_ptsize(void)
+{
+	/*
+	 * For IOMMU, we could do up to 4G virtual range if we wanted to, but
+	 * it makes more sense to return a smaller range and leave the rest of
+	 * the virtual range for future improvements
+	 */
+
+	if (KGSL_MMU_TYPE_GPU == kgsl_mmu_type)
+		return CONFIG_MSM_KGSL_PAGE_TABLE_SIZE;
+	else if (KGSL_MMU_TYPE_IOMMU == kgsl_mmu_type)
+		return SZ_2G;
+	else
+		return 0;
+}
+
 unsigned int kgsl_mmu_get_current_ptbase(struct kgsl_device *device)
 {
 	struct kgsl_mmu *mmu = &device->mmu;
@@ -298,7 +314,8 @@ kgsl_mmu_get_ptname_from_ptbase(unsigned int pt_base)
 EXPORT_SYMBOL(kgsl_mmu_get_ptname_from_ptbase);
 
 void kgsl_mmu_setstate(struct kgsl_device *device,
-			struct kgsl_pagetable *pagetable)
+			struct kgsl_pagetable *pagetable,
+			unsigned int context_id)
 {
 	struct kgsl_mmu *mmu = &device->mmu;
 
@@ -306,7 +323,7 @@ void kgsl_mmu_setstate(struct kgsl_device *device,
 		return;
 	else
 		mmu->mmu_ops->mmu_setstate(device,
-					pagetable);
+					pagetable, context_id);
 }
 EXPORT_SYMBOL(kgsl_mmu_setstate);
 
@@ -392,6 +409,7 @@ static struct kgsl_pagetable *kgsl_mmu_createpagetableobject(
 	int status = 0;
 	struct kgsl_pagetable *pagetable = NULL;
 	unsigned long flags;
+	unsigned int ptsize;
 
 	pagetable = kzalloc(sizeof(struct kgsl_pagetable), GFP_KERNEL);
 	if (pagetable == NULL) {
@@ -403,9 +421,11 @@ static struct kgsl_pagetable *kgsl_mmu_createpagetableobject(
 	kref_init(&pagetable->refcount);
 
 	spin_lock_init(&pagetable->lock);
+
+	ptsize = kgsl_mmu_get_ptsize();
+
 	pagetable->name = name;
-	pagetable->max_entries = KGSL_PAGETABLE_ENTRIES(
-					CONFIG_MSM_KGSL_PAGE_TABLE_SIZE);
+	pagetable->max_entries = KGSL_PAGETABLE_ENTRIES(ptsize);
 
 	pagetable->pool = gen_pool_create(PAGE_SHIFT, -1);
 	if (pagetable->pool == NULL) {
@@ -414,7 +434,7 @@ static struct kgsl_pagetable *kgsl_mmu_createpagetableobject(
 	}
 
 	if (gen_pool_add(pagetable->pool, KGSL_PAGETABLE_BASE,
-				CONFIG_MSM_KGSL_PAGE_TABLE_SIZE, -1)) {
+				ptsize, -1)) {
 		KGSL_CORE_ERR("gen_pool_add failed\n");
 		goto err_pool;
 	}
@@ -478,13 +498,14 @@ void kgsl_mmu_putpagetable(struct kgsl_pagetable *pagetable)
 }
 EXPORT_SYMBOL(kgsl_mmu_putpagetable);
 
-void kgsl_setstate(struct kgsl_device *device, uint32_t flags)
+void kgsl_setstate(struct kgsl_device *device, unsigned int context_id,
+			uint32_t flags)
 {
 	struct kgsl_mmu *mmu = &device->mmu;
 	if (KGSL_MMU_TYPE_NONE == kgsl_mmu_type)
 		return;
 	else if (device->ftbl->setstate)
-		device->ftbl->setstate(device, flags);
+		device->ftbl->setstate(device, context_id, flags);
 	else if (mmu->mmu_ops->mmu_device_setstate)
 		mmu->mmu_ops->mmu_device_setstate(device, flags);
 }
@@ -535,16 +556,9 @@ kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 	int ret;
 
 	if (kgsl_mmu_type == KGSL_MMU_TYPE_NONE) {
-		if (memdesc->sglen == 1) {
-			memdesc->gpuaddr = sg_phys(memdesc->sg);
-			return 0;
-		} else {
-			KGSL_CORE_ERR("Memory is not contigious "
-					"(sglen = %d)\n", memdesc->sglen);
-			return -EINVAL;
-		}
+		memdesc->gpuaddr = memdesc->physaddr;
+		return 0;
 	}
-
 	memdesc->gpuaddr = gen_pool_alloc_aligned(pagetable->pool,
 		memdesc->size, KGSL_MMU_ALIGN_SHIFT);
 
@@ -684,10 +698,10 @@ void kgsl_mmu_ptpool_destroy(void *ptpool)
 }
 EXPORT_SYMBOL(kgsl_mmu_ptpool_destroy);
 
-void *kgsl_mmu_ptpool_init(int ptsize, int entries)
+void *kgsl_mmu_ptpool_init(int entries)
 {
 	if (KGSL_MMU_TYPE_GPU == kgsl_mmu_type)
-		return kgsl_gpummu_ptpool_init(ptsize, entries);
+		return kgsl_gpummu_ptpool_init(entries);
 	else
 		return (void *)(-1);
 }
@@ -720,14 +734,7 @@ EXPORT_SYMBOL(kgsl_mmu_get_mmutype);
 
 void kgsl_mmu_set_mmutype(char *mmutype)
 {
-	/* Set the default MMU - GPU on <=8960 and nothing on >= 8064 */
-	kgsl_mmu_type =
-		cpu_is_apq8064() ? KGSL_MMU_TYPE_NONE : KGSL_MMU_TYPE_GPU;
-
-	/* Use the IOMMU if it is found */
-	if (iommu_found())
-		kgsl_mmu_type = KGSL_MMU_TYPE_IOMMU;
-
+	kgsl_mmu_type = iommu_found() ? KGSL_MMU_TYPE_IOMMU : KGSL_MMU_TYPE_GPU;
 	if (mmutype && !strncmp(mmutype, "gpummu", 6))
 		kgsl_mmu_type = KGSL_MMU_TYPE_GPU;
 	if (iommu_found() && mmutype && !strncmp(mmutype, "iommu", 5))

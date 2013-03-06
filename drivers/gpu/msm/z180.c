@@ -157,15 +157,6 @@ static struct z180_device device_2d0 = {
 		.active_cnt = 0,
 		.iomemname = KGSL_2D0_REG_MEMORY,
 		.ftbl = &z180_functable,
-		.display_off = {
-#ifdef CONFIG_HAS_EARLYSUSPEND
-#if 0
-			.level = EARLY_SUSPEND_LEVEL_STOP_DRAWING,
-			.suspend = kgsl_early_suspend_driver,
-			.resume = kgsl_late_resume_driver,
-#endif
-#endif
-		},
 	},
 };
 
@@ -197,15 +188,6 @@ static struct z180_device device_2d1 = {
 		.active_cnt = 0,
 		.iomemname = KGSL_2D1_REG_MEMORY,
 		.ftbl = &z180_functable,
-		.display_off = {
-#ifdef CONFIG_HAS_EARLYSUSPEND
-#if 0
-			.level = EARLY_SUSPEND_LEVEL_STOP_DRAWING,
-			.suspend = kgsl_early_suspend_driver,
-			.resume = kgsl_late_resume_driver,
-#endif
-#endif
-		},
 	},
 };
 
@@ -348,8 +330,6 @@ static void z180_cmdstream_start(struct kgsl_device *device)
 	struct z180_device *z180_dev = Z180_DEVICE(device);
 	unsigned int cmd = VGV3_NEXTCMD_JUMP << VGV3_NEXTCMD_NEXTCMD_FSHIFT;
 
-	KGSL_PWR_WARN(device, "reset timestamp from(%d, %d), device %d\n",
-	    z180_dev->timestamp, z180_dev->current_timestamp, device->id);
 	z180_dev->timestamp = 0;
 	z180_dev->current_timestamp = 0;
 
@@ -413,7 +393,7 @@ z180_cmdstream_issueibcmds(struct kgsl_device_private *dev_priv,
 	unsigned int index	= 0;
 	unsigned int nextindex;
 	unsigned int nextcnt    = Z180_STREAM_END_CMD | 5;
-	struct kgsl_memdesc tmp = {0};
+	struct kgsl_mem_entry *entry = NULL;
 	unsigned int cmd;
 	struct kgsl_device *device = dev_priv->device;
 	struct kgsl_pagetable *pagetable = dev_priv->process_priv->pagetable;
@@ -431,8 +411,30 @@ z180_cmdstream_issueibcmds(struct kgsl_device_private *dev_priv,
 	}
 	cmd = ibdesc[0].gpuaddr;
 	sizedwords = ibdesc[0].sizedwords;
-
-	tmp.hostptr = (void *)*timestamp;
+	/*
+	 * Get a kernel mapping to the IB for monkey patching.
+	 * See the end of this function.
+	 */
+	entry = kgsl_sharedmem_find_region(dev_priv->process_priv, cmd,
+		sizedwords);
+	if (entry == NULL) {
+		KGSL_DRV_ERR(device, "Bad ibdesc: gpuaddr 0x%x size %d\n",
+			     cmd, sizedwords);
+		result = -EINVAL;
+		goto error;
+	}
+	/*
+	 * This will only map memory if it exists, otherwise it will reuse the
+	 * mapping. And the 2d userspace reuses IBs so we likely won't create
+	 * too many mappings.
+	 */
+	if (kgsl_gpuaddr_to_vaddr(&entry->memdesc, cmd) == NULL) {
+		KGSL_DRV_ERR(device,
+			     "Cannot make kernel mapping for gpuaddr 0x%x\n",
+			     cmd);
+		result = -EINVAL;
+		goto error;
+	}
 
 	KGSL_CMD_INFO(device, "ctxt %d ibaddr 0x%08x sizedwords %d\n",
 		context->id, cmd, sizedwords);
@@ -441,12 +443,13 @@ z180_cmdstream_issueibcmds(struct kgsl_device_private *dev_priv,
 	    (ctrl & KGSL_CONTEXT_CTX_SWITCH)) {
 		KGSL_CMD_INFO(device, "context switch %d -> %d\n",
 			context->id, z180_dev->ringbuffer.prevctx);
-		kgsl_mmu_setstate(device, pagetable);
+		kgsl_mmu_setstate(device, pagetable,
+				0);
 		cnt = PACKETSIZE_STATESTREAM;
 		ofs = 0;
 	}
-	kgsl_setstate(device, kgsl_mmu_pt_get_flags(device->mmu.hwpagetable,
-						    device->id));
+	kgsl_setstate(device, 0, kgsl_mmu_pt_get_flags(device->mmu.hwpagetable,
+			device->id));
 
 	result = wait_event_interruptible_timeout(device->wait_queue,
 				  room_in_rb(z180_dev),
@@ -474,12 +477,13 @@ z180_cmdstream_issueibcmds(struct kgsl_device_private *dev_priv,
 	nextaddr = z180_dev->ringbuffer.cmdbufdesc.gpuaddr
 		+ rb_offset(nextindex);
 
-	tmp.hostptr = (void *)(tmp.hostptr +
-			(sizedwords * sizeof(unsigned int)));
-	tmp.size = 12;
-
-	kgsl_sharedmem_writel(&tmp, 4, nextaddr);
-	kgsl_sharedmem_writel(&tmp, 8, nextcnt);
+	/* monkey patch the IB so that it jumps back to the ringbuffer */
+	kgsl_sharedmem_writel(&entry->memdesc,
+			      ((sizedwords + 1) * sizeof(unsigned int)),
+			      nextaddr);
+	kgsl_sharedmem_writel(&entry->memdesc,
+			      ((sizedwords + 2) * sizeof(unsigned int)),
+			      nextcnt);
 
 	/* sync memory before activating the hardware for the new command*/
 	mb();
@@ -832,15 +836,6 @@ static int z180_wait(struct kgsl_device *device,
 {
 	int status = -EINVAL;
 	long timeout = 0;
-	unsigned int ts_processed;
-
-	ts_processed = device->ftbl->readtimestamp(device,
-		KGSL_TIMESTAMP_RETIRED);
-	if (ts_processed == 0 && timestamp > 10) {
-		KGSL_DRV_ERR(device, "QCT BUG: "
-		    "timestamp was reset and we are looking for %d\n",
-		    timestamp);
-	}
 
 	timeout = wait_io_event_interruptible_timeout(
 			device->wait_queue,
@@ -852,7 +847,6 @@ static int z180_wait(struct kgsl_device *device,
 	else if (timeout == 0) {
 		status = -ETIMEDOUT;
 		kgsl_pwrctrl_set_state(device, KGSL_STATE_HUNG);
-		KGSL_PWR_ERR(device, "state -> HUNG, device %d\n", device->id);
 	} else
 		status = timeout;
 
@@ -870,7 +864,8 @@ z180_drawctxt_destroy(struct kgsl_device *device,
 	if (z180_dev->ringbuffer.prevctx == context->id) {
 		z180_dev->ringbuffer.prevctx = Z180_INVALID_CONTEXT;
 		device->mmu.hwpagetable = device->mmu.defaultpagetable;
-		kgsl_setstate(device, KGSL_MMUFLAGS_PTUPDATE);
+		kgsl_setstate(device, 0,
+				KGSL_MMUFLAGS_PTUPDATE);
 	}
 }
 

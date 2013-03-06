@@ -42,7 +42,7 @@ static struct kgsl_pwrscale_policy *kgsl_pwrscale_policies[] = {
 #ifdef CONFIG_MSM_SCM
 	&kgsl_pwrscale_policy_tz,
 #endif
-#ifdef CONFIG_MSM_SLEEP_STATS
+#ifdef CONFIG_MSM_SLEEP_STATS_DEVICE
 	&kgsl_pwrscale_policy_idlestats,
 #endif
 	NULL
@@ -90,7 +90,7 @@ static ssize_t pwrscale_policy_show(struct kgsl_device *device, char *buf)
 	return ret;
 }
 
-PWRSCALE_ATTR(policy, 0644, pwrscale_policy_show, pwrscale_policy_store);
+PWRSCALE_ATTR(policy, 0664, pwrscale_policy_show, pwrscale_policy_store);
 
 static ssize_t pwrscale_avail_policies_show(struct kgsl_device *device,
 					    char *buf)

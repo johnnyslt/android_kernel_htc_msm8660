@@ -21,8 +21,12 @@
 #include <linux/mutex.h>
 #include <linux/cdev.h>
 #include <linux/regulator/consumer.h>
+#include <linux/mm.h>
 
 #define KGSL_NAME "kgsl"
+
+/* Timestamp window used to detect rollovers (half of integer range) */
+#define KGSL_TIMESTAMP_WINDOW 0x80000000
 
 /*cache coherency ops */
 #define DRM_KGSL_GEM_CACHE_OP_TO_DEV	0x0001
@@ -39,10 +43,6 @@
 
 #define KGSL_PAGETABLE_ENTRIES(_sz) (((_sz) >> PAGE_SHIFT) + \
 				     KGSL_PT_EXTRA_ENTRIES)
-
-#define KGSL_PAGETABLE_SIZE \
-ALIGN(KGSL_PAGETABLE_ENTRIES(CONFIG_MSM_KGSL_PAGE_TABLE_SIZE) * \
-KGSL_PAGETABLE_ENTRY_SIZE, PAGE_SIZE)
 
 #ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
 #define KGSL_PAGETABLE_COUNT (CONFIG_MSM_KGSL_PAGE_TABLE_COUNT)
@@ -102,7 +102,15 @@ struct kgsl_driver {
 extern struct kgsl_driver kgsl_driver;
 
 struct kgsl_pagetable;
-struct kgsl_memdesc_ops;
+struct kgsl_memdesc;
+
+struct kgsl_memdesc_ops {
+	int (*vmflags)(struct kgsl_memdesc *);
+	int (*vmfault)(struct kgsl_memdesc *, struct vm_area_struct *,
+		       struct vm_fault *);
+	void (*free)(struct kgsl_memdesc *memdesc);
+	int (*map_kernel_mem)(struct kgsl_memdesc *);
+};
 
 /* shared memory allocation */
 struct kgsl_memdesc {
@@ -131,7 +139,7 @@ struct kgsl_mem_entry {
 	struct kgsl_memdesc memdesc;
 	int memtype;
 	void *priv_data;
-	struct list_head list;
+	struct rb_node node;
 	uint32_t free_timestamp;
 	/* back pointer to private structure under whose context this
 	* allocation is made */
@@ -181,25 +189,46 @@ static inline int kgsl_gpuaddr_in_memdesc(const struct kgsl_memdesc *memdesc,
 	}
 	return 0;
 }
-static inline uint8_t *kgsl_gpuaddr_to_vaddr(const struct kgsl_memdesc *memdesc,
-					     unsigned int gpuaddr)
-{
-	if (memdesc->hostptr == NULL || memdesc->gpuaddr == 0 ||
-		(gpuaddr < memdesc->gpuaddr ||
-		gpuaddr >= memdesc->gpuaddr + memdesc->size))
-		return NULL;
 
-	return memdesc->hostptr + (gpuaddr - memdesc->gpuaddr);
+static inline void *kgsl_memdesc_map(struct kgsl_memdesc *memdesc)
+{
+	if (memdesc->hostptr == NULL && memdesc->ops &&
+		memdesc->ops->map_kernel_mem)
+		memdesc->ops->map_kernel_mem(memdesc);
+
+	return memdesc->hostptr;
 }
 
-static inline int timestamp_cmp(unsigned int new, unsigned int old)
+static inline uint8_t *kgsl_gpuaddr_to_vaddr(struct kgsl_memdesc *memdesc,
+					     unsigned int gpuaddr)
 {
-	int ts_diff = new - old;
+	void *hostptr = NULL;
 
-	if (ts_diff == 0)
+	if ((gpuaddr >= memdesc->gpuaddr) &&
+		(gpuaddr < (memdesc->gpuaddr + memdesc->size)))
+		hostptr = kgsl_memdesc_map(memdesc);
+
+	return hostptr != NULL ? hostptr + (gpuaddr - memdesc->gpuaddr) : NULL;
+}
+
+static inline int timestamp_cmp(unsigned int a, unsigned int b)
+{
+	/* check for equal */
+	if (a == b)
 		return 0;
 
-	return ((ts_diff > 0) || (ts_diff < -25000)) ? 1 : -1;
+	/* check for greater-than for non-rollover case */
+	if ((a > b) && (a - b < KGSL_TIMESTAMP_WINDOW))
+		return 1;
+
+	/* check for greater-than for rollover case
+	 * note that <= is required to ensure that consistent
+	 * results are returned for values whose difference is
+	 * equal to the window size
+	 */
+	a += KGSL_TIMESTAMP_WINDOW;
+	b += KGSL_TIMESTAMP_WINDOW;
+	return ((a > b) && (a - b <= KGSL_TIMESTAMP_WINDOW)) ? 1 : -1;
 }
 
 static inline void
@@ -213,5 +242,11 @@ kgsl_mem_entry_put(struct kgsl_mem_entry *entry)
 {
 	kref_put(&entry->refcount, kgsl_mem_entry_destroy);
 }
+int kgsl_add_event(struct kgsl_device *device, u32 ts,
+	void (*cb)(struct kgsl_device *, void *, u32), void *priv,
+	void *owner);
+
+void kgsl_cancel_events(struct kgsl_device *device,
+	void *owner);
 
 #endif /* __KGSL_H */

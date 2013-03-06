@@ -15,6 +15,7 @@
 
 #include <linux/idr.h>
 #include <linux/wakelock.h>
+#include <linux/pm_qos_params.h>
 #include <linux/earlysuspend.h>
 
 #include "kgsl.h"
@@ -22,6 +23,7 @@
 #include "kgsl_pwrctrl.h"
 #include "kgsl_log.h"
 #include "kgsl_pwrscale.h"
+#include <linux/sync.h>
 
 #define KGSL_TIMEOUT_NONE       0
 #define KGSL_TIMEOUT_DEFAULT    0xFFFFFFFF
@@ -56,6 +58,7 @@ struct platform_device;
 struct kgsl_device_private;
 struct kgsl_context;
 struct kgsl_power_stats;
+struct kgsl_event;
 
 struct kgsl_functable {
 	/* Mandatory functions - these functions must be implemented
@@ -95,7 +98,8 @@ struct kgsl_functable {
 	/* Optional functions - these functions are not mandatory.  The
 	   driver will check that the function pointer is not NULL before
 	   calling the hook */
-	void (*setstate) (struct kgsl_device *device, uint32_t flags);
+	void (*setstate) (struct kgsl_device *device, unsigned int context_id,
+			uint32_t flags);
 	int (*drawctxt_create) (struct kgsl_device *device,
 		struct kgsl_pagetable *pagetable, struct kgsl_context *context,
 		uint32_t flags);
@@ -103,6 +107,8 @@ struct kgsl_functable {
 		struct kgsl_context *context);
 	long (*ioctl) (struct kgsl_device_private *dev_priv,
 		unsigned int cmd, void *data);
+	void (*next_event)(struct kgsl_device *device,
+		struct kgsl_event *event);
 };
 
 struct kgsl_memregion {
@@ -126,7 +132,7 @@ struct kgsl_event {
 	void (*func)(struct kgsl_device *, void *, u32);
 	void *priv;
 	struct list_head list;
-	struct kgsl_device_private *owner;
+	void *owner;
 };
 
 
@@ -184,9 +190,16 @@ struct kgsl_device {
 	struct wake_lock idle_wakelock;
 	struct kgsl_pwrscale pwrscale;
 	struct kobject pwrscale_kobj;
+	struct pm_qos_request_list pm_qos_req_dma;
 	struct work_struct ts_expired_ws;
 	struct list_head events;
 	s64 on_time;
+
+	/* page fault debugging parameters */
+	struct work_struct print_fault_ib;
+	unsigned int page_fault_ptbase;
+	unsigned int page_fault_ib1;
+	unsigned int page_fault_rptr;
 };
 
 struct kgsl_context {
@@ -197,13 +210,24 @@ struct kgsl_context {
 
 	/* Pointer to the device specific context information */
 	void *devctxt;
+	/*
+	 * Status indicating whether a gpu reset occurred and whether this
+	 * context was responsible for causing it
+	 */
+	unsigned int reset_status;
+
+	/*
+	 * Timeline used to create fences that can be signaled when a
+	 * sync_pt timestamp expires.
+	 */
+	struct sync_timeline *timeline;
 };
 
 struct kgsl_process_private {
 	unsigned int refcnt;
 	pid_t pid;
 	spinlock_t mem_lock;
-	struct list_head mem_list;
+	struct rb_root mem_rb;
 	struct kgsl_pagetable *pagetable;
 	struct list_head list;
 	struct kobject kobj;
