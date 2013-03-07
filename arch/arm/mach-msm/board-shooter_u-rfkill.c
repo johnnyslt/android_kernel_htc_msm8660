@@ -40,51 +40,51 @@ static uint32_t shooter_u_bt_on_table[] = {
 				1,
 				GPIO_CFG_OUTPUT,
 				GPIO_CFG_NO_PULL,
-				GPIO_CFG_2MA),
+				GPIO_CFG_8MA),
 	/* BT_CTS */
 	GPIO_CFG(SHOOTER_U_GPIO_BT_UART1_CTS,
 				1,
 				GPIO_CFG_INPUT,
-				GPIO_CFG_NO_PULL,
-				GPIO_CFG_2MA),
+				GPIO_CFG_PULL_UP,
+				GPIO_CFG_8MA),
 	/* BT_RX */
 	GPIO_CFG(SHOOTER_U_GPIO_BT_UART1_RX,
 				1,
 				GPIO_CFG_INPUT,
-				GPIO_CFG_NO_PULL,
-				GPIO_CFG_2MA),
+				GPIO_CFG_PULL_UP,
+				GPIO_CFG_8MA),
 	/* BT_TX */
 	GPIO_CFG(SHOOTER_U_GPIO_BT_UART1_TX,
 				1,
 				GPIO_CFG_OUTPUT,
-				GPIO_CFG_PULL_UP,
-				GPIO_CFG_2MA),
+				GPIO_CFG_NO_PULL,
+				GPIO_CFG_8MA),
 
 	/* BT_HOST_WAKE */
 	GPIO_CFG(SHOOTER_U_GPIO_BT_HOST_WAKE,
 				0,
 				GPIO_CFG_INPUT,
 				GPIO_CFG_NO_PULL,
-				GPIO_CFG_2MA),
+				GPIO_CFG_4MA),
 	/* BT_CHIP_WAKE */
 	GPIO_CFG(SHOOTER_U_GPIO_BT_CHIP_WAKE,
 				0,
 				GPIO_CFG_OUTPUT,
 				GPIO_CFG_NO_PULL,
-				GPIO_CFG_2MA),
+				GPIO_CFG_4MA),
 
 	/* BT_RESET_N */
 	GPIO_CFG(SHOOTER_U_GPIO_BT_RESET_N,
 				0,
 				GPIO_CFG_OUTPUT,
 				GPIO_CFG_NO_PULL,
-				GPIO_CFG_2MA),
+				GPIO_CFG_4MA),
 	/* BT_SHUTDOWN_N */
 	GPIO_CFG(SHOOTER_U_GPIO_BT_SHUTDOWN_N,
 				0,
 				GPIO_CFG_OUTPUT,
 				GPIO_CFG_NO_PULL,
-				GPIO_CFG_2MA),
+				GPIO_CFG_4MA),
 };
 
 /* bt off configuration */
@@ -95,51 +95,51 @@ static uint32_t shooter_u_bt_off_table[] = {
 				0,
 				GPIO_CFG_OUTPUT,
 				GPIO_CFG_NO_PULL,
-				GPIO_CFG_2MA),
+				GPIO_CFG_8MA),
 	/* BT_CTS */
 	GPIO_CFG(SHOOTER_U_GPIO_BT_UART1_CTS,
 				0,
 				GPIO_CFG_INPUT,
-				GPIO_CFG_PULL_DOWN,
-				GPIO_CFG_2MA),
+				GPIO_CFG_PULL_UP,
+				GPIO_CFG_8MA),
 	/* BT_RX */
 	GPIO_CFG(SHOOTER_U_GPIO_BT_UART1_RX,
 				0,
 				GPIO_CFG_INPUT,
-				GPIO_CFG_PULL_DOWN,
-				GPIO_CFG_2MA),
+				GPIO_CFG_PULL_UP,
+				GPIO_CFG_8MA),
 	/* BT_TX */
 	GPIO_CFG(SHOOTER_U_GPIO_BT_UART1_TX,
 				0,
 				GPIO_CFG_OUTPUT,
 				GPIO_CFG_NO_PULL,
-				GPIO_CFG_2MA),
+				GPIO_CFG_8MA),
 
 	/* BT_RESET_N */
 	GPIO_CFG(SHOOTER_U_GPIO_BT_RESET_N,
 				0,
 				GPIO_CFG_OUTPUT,
 				GPIO_CFG_NO_PULL,
-				GPIO_CFG_2MA),
+				GPIO_CFG_4MA),
 	/* BT_SHUTDOWN_N */
 	GPIO_CFG(SHOOTER_U_GPIO_BT_SHUTDOWN_N,
 				0,
 				GPIO_CFG_OUTPUT,
 				GPIO_CFG_NO_PULL,
-				GPIO_CFG_2MA),
+				GPIO_CFG_4MA),
 
 	/* BT_HOST_WAKE */
 	GPIO_CFG(SHOOTER_U_GPIO_BT_HOST_WAKE,
 				0,
 				GPIO_CFG_INPUT,
-				GPIO_CFG_PULL_DOWN,
-				GPIO_CFG_2MA),
+				GPIO_CFG_PULL_UP,
+				GPIO_CFG_4MA),
 	/* BT_CHIP_WAKE */
 	GPIO_CFG(SHOOTER_U_GPIO_BT_CHIP_WAKE,
 				0,
 				GPIO_CFG_OUTPUT,
 				GPIO_CFG_NO_PULL,
-				GPIO_CFG_2MA),
+				GPIO_CFG_4MA),
 };
 
 static void config_bt_table(uint32_t *table, int len)
@@ -163,24 +163,17 @@ static void shooter_u_config_bt_on(void)
 	/* set bt on configuration*/
 	config_bt_table(shooter_u_bt_on_table,
 				ARRAY_SIZE(shooter_u_bt_on_table));
-	mdelay(2);
 
-	/* BT_RESET_N */
-	gpio_set_value(SHOOTER_U_GPIO_BT_RESET_N, 0);
-	mdelay(1);
 
-	/* BT_SHUTDOWN_N */
-	gpio_set_value(SHOOTER_U_GPIO_BT_SHUTDOWN_N, 0);
 	mdelay(5);
 
 	/* BT_SHUTDOWN_N */
 	gpio_set_value(SHOOTER_U_GPIO_BT_SHUTDOWN_N, 1);
-	mdelay(1);
+	/*mdelay(2);*/
 
 	/* BT_RESET_N */
 	gpio_set_value(SHOOTER_U_GPIO_BT_RESET_N, 1);
 	mdelay(2);
-
 }
 
 static void shooter_u_config_bt_off(void)
@@ -189,26 +182,26 @@ static void shooter_u_config_bt_off(void)
 
 	/* BT_RESET_N */
 	gpio_set_value(SHOOTER_U_GPIO_BT_RESET_N, 0);
-	mdelay(1);
+	/*mdelay(2);*/
 
 	/* BT_SHUTDOWN_N */
 	gpio_set_value(SHOOTER_U_GPIO_BT_SHUTDOWN_N, 0);
-	mdelay(1);
+	mdelay(2);
 
 	/* set bt off configuration*/
 	config_bt_table(shooter_u_bt_off_table,
 				ARRAY_SIZE(shooter_u_bt_off_table));
-	mdelay(2);
+	mdelay(5);
 
 	/* BT_RTS */
-	gpio_set_value(SHOOTER_U_GPIO_BT_UART1_RTS, 0);
+	gpio_set_value(SHOOTER_U_GPIO_BT_UART1_RTS, 1);
 
 	/* BT_CTS */
 
+	/* BT_RX */
+
 	/* BT_TX */
 	gpio_set_value(SHOOTER_U_GPIO_BT_UART1_TX, 0);
-
-	/* BT_RX */
 
 
 	/* BT_HOST_WAKE */
@@ -249,6 +242,7 @@ static int shooter_u_rfkill_probe(struct platform_device *pdev)
 /*
 	htc_wifi_bt_sleep_clk_ctl(CLK_ON, ID_BT);
 */
+
 	mdelay(2);
 
 	bluetooth_set_power(NULL, default_state);
@@ -284,6 +278,7 @@ err_gpio_reset:
 static int shooter_u_rfkill_remove(struct platform_device *dev)
 {
 	rfkill_unregister(bt_rfk);
+	/*rfkill_free(bt_rfk);*/
 	rfkill_destroy(bt_rfk);
 #if 0
 	gpio_free(SHOOTER_U_GPIO_BT_SHUTDOWN_N);
