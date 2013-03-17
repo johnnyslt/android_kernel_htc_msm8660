@@ -1611,7 +1611,39 @@ config CPU_VOLTAGE_TABLE
 config CMDLINE_OPTIONS
 	bool "Enable cmdline khz/gov/maxscroff command parsing"
 	default y
+config MSM_MPDEC
+	bool "Enable kernel based mpdecision"
+	depends on MSM_SMP
+	default n
 	select MSM_CPU_FREQ_SET_MIN_MAX
+	help
+	  This enables kernel based multi core control.
+	  (up/down hotplug based on load)
+
+config MSM_MPDEC_STARTDELAY
+	int "Deplay before starting MP DECISION"
+	default 70000
+	depends on MSM_MPDEC
+
+config MSM_MPDEC_DELAY
+	int "Deplay before resuming MP DECISION"
+	default 500
+	depends on MSM_MPDEC
+
+config MSM_MPDEC_PAUSE
+	int "How long to pause after external process controls cpu"
+	default 10000
+	depends on MSM_MPDEC
+
+config MSM_MPDEC_SCROFF_FREQ
+	int "Screen Off MAX CPU"
+	default 384000
+	depends on MSM_MPDEC
+
+config MSM_MPDEC_IDLE_FREQ
+	int "Idle MAX CPU"
+	default 384000
+	depends on MSM_MPDEC
 
 if CPU_FREQ_MSM
 
