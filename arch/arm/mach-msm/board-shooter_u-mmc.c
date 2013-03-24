@@ -43,6 +43,8 @@
 #include "mpm.h"
 #include "rpm_resources.h"
 
+#include <mach/htc_sleep_clk.h>
+
 int msm_proc_comm(unsigned cmd, unsigned *data1, unsigned *data2);
 
 /* ---- PM QOS ---- */
@@ -219,7 +221,7 @@ int shooter_u_wifi_power(int on)
 		config_gpio_table(wifi_off_gpio_table,
 				  ARRAY_SIZE(wifi_off_gpio_table));
 	}
-	/* htc_wifi_bt_sleep_clk_ctl(on, ID_WIFI); */
+	htc_wifi_bt_sleep_clk_ctl(on, ID_WIFI);
 	mdelay(1);//Delay 1 ms, Recommand by Hardware
 	gpio_set_value(SHOOTER_U_GPIO_WIFI_SHUTDOWN_N, on); /* WIFI_SHUTDOWN */
 
