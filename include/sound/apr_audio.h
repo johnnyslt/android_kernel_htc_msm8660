@@ -18,7 +18,7 @@
 #define _APR_AUDIO_H_
 
 /* ASM opcodes without APR payloads*/
-#include <mach/qdsp6v2/apr.h>
+#include <mach/qdsp6v3/apr.h>
 
 /*
  * Audio Front End (AFE)
