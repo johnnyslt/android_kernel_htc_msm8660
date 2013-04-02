@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -84,10 +84,6 @@
 
 #define DDL_MAX_NUM_IN_INPUTFRAME_POOL          (DDL_MAX_NUM_OF_B_FRAME + 1)
 
-/* HTC_START */
-extern int mTotalErrorFrames;
-/* HTC_END */
-
 enum ddl_mem_area {
 	DDL_FW_MEM	= 0x0,
 	DDL_MM_MEM	= 0x1,
@@ -104,6 +100,7 @@ struct ddl_buf_addr{
 	struct ion_handle *alloc_handle;
 	u32 buffer_size;
 	enum ddl_mem_area mem_type;
+	void *pil_cookie;
 };
 enum ddl_cmd_state{
 	DDL_CMD_INVALID         = 0x0,
@@ -254,6 +251,7 @@ struct ddl_encoder_data{
 	struct vcd_property_intra_refresh_mb_number  intra_refresh;
 	struct vcd_property_buffer_format  buf_format;
 	struct vcd_property_buffer_format  recon_buf_format;
+	struct vcd_property_sps_pps_for_idr_enable sps_pps;
 	struct ddl_buf_addr  seq_header;
 	struct vcd_buffer_requirement  input_buf_req;
 	struct vcd_buffer_requirement  output_buf_req;
@@ -467,6 +465,8 @@ void ddl_decoder_chroma_dpb_change(struct ddl_client_context *ddl);
 u32  ddl_check_reconfig(struct ddl_client_context *ddl);
 void ddl_handle_reconfig(u32 res_change, struct ddl_client_context *ddl);
 void ddl_fill_dec_desc_buffer(struct ddl_client_context *ddl);
+void ddl_set_vidc_timeout(struct ddl_client_context *ddl);
+
 
 #ifdef DDL_BUF_LOG
 void ddl_list_buffers(struct ddl_client_context *ddl);
@@ -480,5 +480,5 @@ extern u32 vidc_video_codec_fw_size;
 u32 ddl_fw_init(struct ddl_buf_addr *dram_base);
 void ddl_get_fw_info(const unsigned char **fw_array_addr,
 	unsigned int *fw_size);
-void ddl_fw_release(void);
+void ddl_fw_release(struct ddl_buf_addr *);
 #endif

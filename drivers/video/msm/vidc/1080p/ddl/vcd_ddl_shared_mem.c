@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -45,7 +45,7 @@
 #define VIDC_SM_DISP_PIC_PROFILE_DISP_PIC_PROFILE_SHFT      0
 
 #define VIDC_SM_DISP_PIC_FRAME_TYPE_ADDR                    0x00c0
-#define VIDC_SM_DISP_PIC_FRAME_TYPE_BMSK                    0x00000003
+#define VIDC_SM_DISP_PIC_FRAME_TYPE_BMSK                    0x0000003f
 #define VIDC_SM_DISP_PIC_FRAME_TYPE_SHFT                    0
 
 #define VIDC_SM_FREE_LUMA_DPB_ADDR                          0x00c4
@@ -85,6 +85,8 @@
 #define VIDC_SM_ENC_EXT_CTRL_VBV_BUFFER_SIZE_SHFT    16
 #define VIDC_SM_ENC_EXT_CTRL_H263_CPCFC_ENABLE_BMSK  0x80
 #define VIDC_SM_ENC_EXT_CTRL_H263_CPCFC_ENABLE_SHFT  7
+#define VIDC_SM_ENC_EXT_CTRL_SPS_PPS_CONTROL_BMSK    0X100
+#define VIDC_SM_ENC_EXT_CTRL_SPS_PPS_CONTROL_SHFT    8
 #define VIDC_SM_ENC_EXT_CTRL_SEQ_HDR_CTRL_BMSK       0x8
 #define VIDC_SM_ENC_EXT_CTRL_SEQ_HDR_CTRL_SHFT       3
 #define VIDC_SM_ENC_EXT_CTRL_FRAME_SKIP_ENABLE_BMSK  0x6
@@ -173,6 +175,7 @@
 #define VIDC_SM_ENC_NUM_OF_SLICE_COMP_VALUE_BMSK                  0xffffffff
 #define VIDC_SM_ENC_NUM_OF_SLICE_COMP_VALUE_SHFT                  0
 
+
 #define VIDC_SM_ALLOCATED_LUMA_DPB_SIZE_ADDR               0x0064
 #define VIDC_SM_ALLOCATED_CHROMA_DPB_SIZE_ADDR             0x0068
 #define VIDC_SM_ALLOCATED_MV_SIZE_ADDR                     0x006c
@@ -226,9 +229,24 @@
 #define VIDC_SM_CHROMA_ADDR_CHANGE_BMASK  0x00000001
 #define VIDC_SM_CHROMA_ADDR_CHANGE_SHFT   0
 
+#define VIDC_SM_ERROR_CONCEALMENT_CONFIG_ADDR   0x0154
+
+#define VIDC_SM_ERROR_CONCEALMENT_CONFIG_INTER_SLICE_BMSK  0x0c
+#define VIDC_SM_ERROR_CONCEALMENT_CONFIG_INTER_SLICE_SHFT 2
+#define VIDC_SM_ERROR_CONCEALMENT_CONFIG_INTRA_SLICE_BMSK 0X02
+#define VIDC_SM_ERROR_CONCEALMENT_CONFIG_INTRA_SLICE_SHFT 1
+#define VIDC_SM_ERROR_CONCEALMENT_CONFIG_CONCEAL_ENABLE_BMSK  0x01
+#define VIDC_SM_ERROR_CONCEALMENT_CONFIG_CONCEAL_ENABLE_SHFT   0
+
 #define VIDC_SM_SEI_ENABLE_ADDR                     0x0180
 #define VIDC_SM_SEI_ENABLE_RECOVERY_POINT_SEI_BMSK  0x00000001
 #define VIDC_SM_SEI_ENABLE_RECOVERY_POINT_SEI_SHFT  0
+
+#define VIDC_SM_NUM_STUFF_BYTES_CONSUME_ADDR    0X01ac
+
+#define VIDC_SM_TIMEOUT_VALUE_ADDR        0x0158
+#define VIDC_SM_TIMEOUT_VALUE_BMSK        0xffffffff
+#define VIDC_SM_TIMEOUT_VALUE_SHFT        0
 
 #define VIDC_SM_ENC_EXT_CTRL_CLOSED_GOP_ENABLE_BMSK	0x40
 #define VIDC_SM_ENC_EXT_CTRL_CLOSED_GOP_ENABLE_SHFT	6
@@ -378,7 +396,7 @@ void vidc_sm_set_extended_encoder_control(struct ddl_buf_addr
 	*shared_mem, u32 hec_enable,
 	enum VIDC_SM_frame_skip frame_skip_mode,
 	u32 seq_hdr_in_band, u32 vbv_buffer_size, u32 cpcfc_enable,
-	u32 closed_gop_enable)
+	u32 sps_pps_control, u32 closed_gop_enable)
 {
 	u32 enc_ctrl;
 
@@ -397,6 +415,9 @@ void vidc_sm_set_extended_encoder_control(struct ddl_buf_addr
 			VIDC_SETFIELD((cpcfc_enable) ? 1 : 0,
 			VIDC_SM_ENC_EXT_CTRL_H263_CPCFC_ENABLE_SHFT,
 			VIDC_SM_ENC_EXT_CTRL_H263_CPCFC_ENABLE_BMSK) |
+			VIDC_SETFIELD((sps_pps_control) ? 1 : 0,
+			VIDC_SM_ENC_EXT_CTRL_SPS_PPS_CONTROL_SHFT,
+			VIDC_SM_ENC_EXT_CTRL_SPS_PPS_CONTROL_BMSK) |
 			VIDC_SETFIELD(closed_gop_enable,
 			VIDC_SM_ENC_EXT_CTRL_CLOSED_GOP_ENABLE_SHFT,
 			VIDC_SM_ENC_EXT_CTRL_CLOSED_GOP_ENABLE_BMSK);
@@ -752,6 +773,42 @@ void vidc_sm_get_decoder_sei_enable(struct ddl_buf_addr *shared_mem,
 	*sei_enable = DDL_MEM_READ_32(shared_mem, VIDC_SM_SEI_ENABLE_ADDR);
 }
 
+void vidc_sm_set_error_concealment_config(struct ddl_buf_addr *shared_mem,
+	u32 inter_slice, u32 intra_slice, u32 conceal_config_enable)
+{
+	u32 error_conceal_config = 0;
+
+	error_conceal_config = VIDC_SETFIELD(inter_slice,
+			VIDC_SM_ERROR_CONCEALMENT_CONFIG_INTER_SLICE_SHFT,
+			VIDC_SM_ERROR_CONCEALMENT_CONFIG_INTER_SLICE_BMSK);
+
+	error_conceal_config |= VIDC_SETFIELD(intra_slice,
+			VIDC_SM_ERROR_CONCEALMENT_CONFIG_INTRA_SLICE_SHFT,
+			VIDC_SM_ERROR_CONCEALMENT_CONFIG_INTRA_SLICE_BMSK);
+
+	error_conceal_config |= VIDC_SETFIELD(conceal_config_enable,
+			VIDC_SM_ERROR_CONCEALMENT_CONFIG_CONCEAL_ENABLE_SHFT,
+			VIDC_SM_ERROR_CONCEALMENT_CONFIG_CONCEAL_ENABLE_BMSK);
+
+	DDL_MEM_WRITE_32(shared_mem, VIDC_SM_ERROR_CONCEALMENT_CONFIG_ADDR,
+			error_conceal_config);
+}
+
+void vidc_sm_set_decoder_stuff_bytes_consumption(
+	struct ddl_buf_addr *shared_mem,
+	enum vidc_sm_num_stuff_bytes_consume_info consume_info)
+{
+	DDL_MEM_WRITE_32(shared_mem, VIDC_SM_NUM_STUFF_BYTES_CONSUME_ADDR,
+	consume_info);
+}
+
+void vidc_sm_set_video_core_timeout_value(struct ddl_buf_addr *shared_mem,
+        u32 timeout)
+{
+    DDL_MEM_WRITE_32(shared_mem, VIDC_SM_TIMEOUT_VALUE_ADDR,
+        timeout);
+}
+
 void vidc_sm_get_aspect_ratio_info(struct ddl_buf_addr *shared_mem,
 	struct vcd_aspect_ratio *aspect_ratio_info)
 {
@@ -774,46 +831,46 @@ void vidc_sm_get_aspect_ratio_info(struct ddl_buf_addr *shared_mem,
 }
 
 void vidc_sm_set_encoder_slice_batch_int_ctrl(struct ddl_buf_addr *shared_mem,
-	u32 slice_batch_int_enable)
+        u32 slice_batch_int_enable)
 {
-	u32 slice_batch_int_ctrl = VIDC_SETFIELD((slice_batch_int_enable) ?
-				1 : 0,
-				VIDC_SM_ENC_EXT_CTRL_HEC_ENABLE_SHFT,
-				VIDC_SM_ENC_EXT_CTRL_HEC_ENABLE_BMSK);
-	DDL_MEM_WRITE_32(shared_mem,
-			VIDC_SM_ENC_SLICE_BATCH_INT_CTRL_ADDR,
-			slice_batch_int_ctrl);
+    u32 slice_batch_int_ctrl = VIDC_SETFIELD((slice_batch_int_enable) ?
+            1 : 0,
+            VIDC_SM_ENC_EXT_CTRL_HEC_ENABLE_SHFT,
+            VIDC_SM_ENC_EXT_CTRL_HEC_ENABLE_BMSK);
+    DDL_MEM_WRITE_32(shared_mem,
+            VIDC_SM_ENC_SLICE_BATCH_INT_CTRL_ADDR,
+            slice_batch_int_ctrl);
 }
 
 void vidc_sm_get_num_slices_comp(struct ddl_buf_addr *shared_mem,
-	u32 *num_slices_comp)
+        u32 *num_slices_comp)
 {
-	*num_slices_comp = DDL_MEM_READ_32(shared_mem,
-				VIDC_SM_ENC_NUM_OF_SLICE_COMP_ADDR);
+    *num_slices_comp = DDL_MEM_READ_32(shared_mem,
+            VIDC_SM_ENC_NUM_OF_SLICE_COMP_ADDR);
 }
 
 void vidc_sm_set_encoder_batch_config(struct ddl_buf_addr *shared_mem,
-				u32 num_slices,
-				u32 input_addr, u32 output_addr,
-				u32 output_buffer_size)
+        u32 num_slices,
+        u32 input_addr, u32 output_addr,
+        u32 output_buffer_size)
 {
-	DDL_MEM_WRITE_32(shared_mem,
-			VIDC_SM_ENC_NUM_OF_SLICE_ADDR,
-			num_slices);
-	DDL_MEM_WRITE_32(shared_mem,
-			VIDC_SM_BATCH_INPUT_ADDR,
-			input_addr);
-	DDL_MEM_WRITE_32(shared_mem,
-			VIDC_SM_BATCH_OUTPUT_ADDR,
-			output_addr);
-	DDL_MEM_WRITE_32(shared_mem,
-			VIDC_SM_BATCH_OUTPUT_SIZE_ADDR,
-			output_buffer_size);
+    DDL_MEM_WRITE_32(shared_mem,
+            VIDC_SM_ENC_NUM_OF_SLICE_ADDR,
+            num_slices);
+    DDL_MEM_WRITE_32(shared_mem,
+            VIDC_SM_BATCH_INPUT_ADDR,
+            input_addr);
+    DDL_MEM_WRITE_32(shared_mem,
+            VIDC_SM_BATCH_OUTPUT_ADDR,
+            output_addr);
+    DDL_MEM_WRITE_32(shared_mem,
+            VIDC_SM_BATCH_OUTPUT_SIZE_ADDR,
+            output_buffer_size);
 }
 
 void vidc_sm_get_encoder_batch_output_size(struct ddl_buf_addr *shared_mem,
-	u32 *output_buffer_size)
+        u32 *output_buffer_size)
 {
-	*output_buffer_size = DDL_MEM_READ_32(shared_mem,
-			VIDC_SM_BATCH_OUTPUT_SIZE_ADDR);
+    *output_buffer_size = DDL_MEM_READ_32(shared_mem,
+            VIDC_SM_BATCH_OUTPUT_SIZE_ADDR);
 }

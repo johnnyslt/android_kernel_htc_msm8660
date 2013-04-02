@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,14 +14,17 @@
 #define _ARCH_IOMMU_DOMAINS_H
 
 enum {
-	GLOBAL_DOMAIN,
+	VIDEO_DOMAIN,
+	CAMERA_DOMAIN,
+	DISPLAY_DOMAIN,
+	ROTATOR_DOMAIN,
 	MAX_DOMAINS
 };
 
 enum {
 	VIDEO_FIRMWARE_POOL,
-	LOW_256MB_POOL,
-	HIGH_POOL,
+	VIDEO_MAIN_POOL,
+	GEN_POOL,
 };
 
 

@@ -39,16 +39,16 @@
 #endif
 
 #define VID_ENC_NAME	"msm_vidc_enc"
-extern u32 vidc_msg_debug;
-/*HTC_START*/
-#define DBG(x...)				\
-	if (vidc_msg_debug) {			\
-		printk(KERN_DEBUG "[VID] " x);	\
-	}
-/*HTC_END*/
 
-#define INFO(x...) printk(KERN_INFO "[VID] " x)
-#define ERR(x...) printk(KERN_ERR "[VID] " x)
+
+#if DEBUG
+#define DBG(x...) printk(KERN_DEBUG x)
+#else
+#define DBG(x...)
+#endif
+
+#define INFO(x...) printk(KERN_INFO x)
+#define ERR(x...) printk(KERN_ERR x)
 
 static struct vid_enc_dev *vid_enc_device_p;
 static dev_t vid_enc_dev_num;
@@ -204,6 +204,7 @@ static void vid_enc_output_frame_done(struct video_client_ctx *client_ctx,
 	s32 buffer_index = -1;
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
 	u32 ion_flag = 0;
+	struct ion_handle *buff_handle = NULL;
 #endif
 
 	if (!client_ctx || !vcd_frame_data) {
@@ -270,11 +271,14 @@ static void vid_enc_output_frame_done(struct video_client_ctx *client_ctx,
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
 	if (venc_msg->venc_msg_info.buf.len > 0) {
 		ion_flag = vidc_get_fd_info(client_ctx, BUFFER_TYPE_OUTPUT,
-					pmem_fd, kernel_vaddr, buffer_index);
+					pmem_fd, kernel_vaddr, buffer_index,
+					&buff_handle);
 		if (ion_flag == CACHED) {
-			clean_and_invalidate_caches(kernel_vaddr,
+			msm_ion_do_cache_op(client_ctx->user_ion_client,
+				buff_handle,
+				(unsigned long *) kernel_vaddr,
 				(unsigned long)venc_msg->venc_msg_info.buf.len,
-				phy_addr);
+				ION_IOC_CLEAN_INV_CACHES);
 		}
 	}
 #endif
@@ -531,7 +535,7 @@ static int vid_enc_open(struct inode *inode, struct file *file)
 {
 	s32 client_index;
 	struct video_client_ctx *client_ctx;
-	u32 vcd_status = VCD_ERR_FAIL;
+	int rc = VCD_ERR_FAIL;
 	u8 client_count = 0;
 
 	INFO("\n msm_vidc_enc: Inside %s()", __func__);
@@ -584,11 +588,11 @@ static int vid_enc_open(struct inode *inode, struct file *file)
 			return -EFAULT;
 		}
 	}
-	vcd_status = vcd_open(vid_enc_device_p->device_handle, false,
-		vid_enc_vcd_cb, client_ctx);
+	rc = vcd_open(vid_enc_device_p->device_handle, false,
+		vid_enc_vcd_cb, client_ctx, 0);
 	client_ctx->stop_msg = 0;
 
-	if (!vcd_status) {
+	if (!rc) {
 		wait_for_completion(&client_ctx->event);
 		if (client_ctx->event_status) {
 			ERR("callback for vcd_open returned error: %u",
@@ -597,13 +601,13 @@ static int vid_enc_open(struct inode *inode, struct file *file)
 			return -EFAULT;
 		}
 	} else {
-		ERR("vcd_open returned error: %u", vcd_status);
+		ERR("vcd_open returned error: %u", rc);
 		mutex_unlock(&vid_enc_device_p->lock);
-		return -EFAULT;
+		return rc;
 	}
 	file->private_data = client_ctx;
 	mutex_unlock(&vid_enc_device_p->lock);
-	return 0;
+	return rc;
 }
 
 static int vid_enc_release(struct inode *inode, struct file *file)
