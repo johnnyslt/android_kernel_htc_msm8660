@@ -184,10 +184,12 @@
 #define shooter_GPIO_BT_RESET_N        (142)
 
 /* USB */
+#define shooter_GPIO_MHL_WAKE_UP        (62)
 #define shooter_GPIO_USB_ID        (63)
 #define shooter_GPIO_MHL_RESET        (70)
 #define shooter_GPIO_MHL_INT        (71)
 #define shooter_GPIO_MHL_USB_SWITCH        (99)
+#define shooter_GPIO_MHL_USB_EN         (139)
 
 /* General */
 #define shooter_GENERAL_I2C_SDA		(59)
