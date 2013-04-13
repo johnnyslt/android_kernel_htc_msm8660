@@ -3202,7 +3202,7 @@ static struct headset_adc_config htc_headset_mgr_config[] = {
 };
 
 static struct htc_headset_mgr_platform_data htc_headset_mgr_data = {
-	.driver_flag		= 0,
+	.driver_flag		= DRIVER_HS_MGR_OLD_AJ,
 	.headset_devices_num	= ARRAY_SIZE(headset_devices),
 	.headset_devices	= headset_devices,
 	.headset_config_num	= ARRAY_SIZE(htc_headset_mgr_config),
@@ -4991,7 +4991,7 @@ A: 3
 X: 14
 */
 
-
+/*
 static int isl29028_threoshold(int b, int c, int a, int x, int *thl_value, int *thh_value)
 {
 	int a_defult = 3, x_defult = 14;
@@ -5006,14 +5006,14 @@ static int isl29028_threoshold(int b, int c, int a, int x, int *thl_value, int *
 	*thl_value = b + ((c - b) / x);
 	return 0;
 }
-
+*/
 
 static struct isl29028_platform_data isl29028_pdata = {
 	.intr = PM8058_GPIO_PM_TO_SYS(shooter_PLS_INT),
 	.levels = {17, 79, 258, 588, 918, 1250, 1962, 2673, 3384, 4095},
 	.golden_adc = 0x4E2,
 	.power = isl29028_power,
-	.calibrate_func = isl29028_threoshold,
+/*	.calibrate_func = isl29028_threoshold,*/
 	.lt = 0x15,
 	.ht = 0x16,
 };
@@ -5036,7 +5036,7 @@ static struct isl29029_platform_data isl29029_pdata = {
 	.levels = {17, 79, 258, 588, 918, 1250, 1962, 2673, 3384, 4095},
 	.golden_adc = 0x4E2,
 	.power = isl29029_power,
-	.calibrate_func = isl29028_threoshold,
+	/*.calibrate_func = isl29028_threoshold,*/
 	.lt = 0x15,
 	.ht = 0x16,
 };

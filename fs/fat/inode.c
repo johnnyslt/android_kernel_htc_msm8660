@@ -296,9 +296,13 @@ EXPORT_SYMBOL_GPL(fat_attach);
 void fat_detach(struct inode *inode)
 {
 	struct msdos_sb_info *sbi = MSDOS_SB(inode->i_sb);
+	if (!sbi)
+	printk(KERN_ERR "%s(%s): sbi is freed\n", __func__, current->comm);
+	if (sbi)
 	spin_lock(&sbi->inode_hash_lock);
 	MSDOS_I(inode)->i_pos = 0;
 	hlist_del_init(&MSDOS_I(inode)->i_fat_hash);
+	if (sbi)
 	spin_unlock(&sbi->inode_hash_lock);
 }
 EXPORT_SYMBOL_GPL(fat_detach);
