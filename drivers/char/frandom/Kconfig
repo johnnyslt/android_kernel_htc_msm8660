@@ -1,0 +1,7 @@
+#
+# FRandom Generator
+#
+
+config FRANDOM
+tristate "FRANDOM support"
+default y
