@@ -43,16 +43,18 @@
 
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 /* prim = 960 x 540 x 4(bpp) x 3(pages) */
-#define MSM_FB_PRIM_BUF_SIZE (960 * ALIGN(540, 32) * 4 * 3)
+#define MSM_FB_PRIM_BUF_SIZE \
+    (roundup((960 * 540 * 4), 4096) * 3) /* 4 bpp x 3 pages */
 #else
 /* prim = 960 x 540 x 4(bpp) x 2(pages) */
-#define MSM_FB_PRIM_BUF_SIZE (960 * ALIGN(540, 32) * 4 * 2)
+#define MSM_FB_PRIM_BUF_SIZE \
+    (roundup((960 * 540 * 4), 4096) * 2) /* 4 bpp x 2 pages */
 #endif
 
 
 #ifdef CONFIG_FB_MSM_OVERLAY_WRITEBACK
 /* width x height x 3 bpp x 2 frame buffer */
-#define MSM_FB_WRITEBACK_SIZE roundup(960 * ALIGN(540, 32) * 3 * 2, 4096)
+#define MSM_FB_WRITEBACK_SIZE roundup((960 * 540 * 3 * 2), 4096)
 #else
 #define MSM_FB_WRITEBACK_SIZE 0
 #endif
