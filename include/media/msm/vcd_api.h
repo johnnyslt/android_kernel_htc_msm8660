@@ -76,7 +76,6 @@ struct vcd_frame_data {
 	u32 intrlcd_ip_frm_tag;
 	u8 *desc_buf;
 	u32 desc_size;
-	struct ion_handle *buff_ion_handle;
 	struct vcd_aspect_ratio aspect_ratio_info;
 };
 
