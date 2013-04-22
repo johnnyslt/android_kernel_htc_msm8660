@@ -531,6 +531,9 @@ static struct platform_device smsc911x_device = {
 		defined(CONFIG_CRYPTO_DEV_QCEDEV) || \
 		defined(CONFIG_CRYPTO_DEV_QCEDEV_MODULE)
 
+#define QCE_SIZE    0x10000
+#define QCE_0_BASE    0x18500000
+
 #define QCE_HW_KEY_SUPPORT	0
 #define QCE_SHA_HMAC_SUPPORT	0
 #define QCE_SHARE_CE_RESOURCE	2
@@ -626,6 +629,8 @@ static struct platform_device qcrypto_device = {
 
 #if defined(CONFIG_CRYPTO_DEV_QCEDEV) || \
 		defined(CONFIG_CRYPTO_DEV_QCEDEV_MODULE)
+
+
 
 static struct msm_ce_hw_support qcedev_ce_hw_suppport = {
 	.ce_shared = QCE_CE_SHARED,
