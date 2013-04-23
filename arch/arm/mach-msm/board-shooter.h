@@ -58,18 +58,12 @@
 #endif
 
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
-/* prim = 1024 x 600 x 4(bpp) x 2(pages)
- * hdmi = 1920 x 1080 x 2(bpp) x 1(page)
- * Note: must be multiple of 4096 */
-#define MSM_FB_SIZE roundup(MSM_FB_PRIM_BUF_SIZE + 0x3F4800 + MSM_FB_DSUB_PMEM_ADDER, 4096)
-#elif defined(CONFIG_FB_MSM_TVOUT)
-/* prim = 1024 x 600 x 4(bpp) x 2(pages)
- * tvout = 720 x 576 x 2(bpp) x 2(pages)
- * Note: must be multiple of 4096 */
-#define MSM_FB_SIZE roundup(MSM_FB_PRIM_BUF_SIZE + 0x195000 + MSM_FB_DSUB_PMEM_ADDER, 4096)
-#else /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
-#define MSM_FB_SIZE roundup(MSM_FB_PRIM_BUF_SIZE + MSM_FB_DSUB_PMEM_ADDER, 4096)
-#endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
+#define MSM_FB_EXT_BUF_SIZE  \
+		(roundup((1920 * 1080 * 2), 4096) * 1) /* 2 bpp x 1 page */
+#else
+#define MSM_FB_EXT_BUF_SIZE	0
+#endif
+
 #define MSM_PMEM_SF_SIZE 0x4000000 /* 64 Mbytes */
 #define MSM_OVERLAY_BLT_SIZE   roundup(960 * ALIGN(540, 32) * 3 * 2, 4096)
 
