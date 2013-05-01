@@ -20,9 +20,9 @@ typedef void (elevator_bio_merged_fn) (struct request_queue *,
 typedef int (elevator_dispatch_fn) (struct request_queue *, int);
 
 typedef void (elevator_add_req_fn) (struct request_queue *, struct request *);
-typedef int (elevator_reinsert_req_fn) (struct request_queue *,
-					struct request *);
+typedef int (elevator_reinsert_req_fn) (struct request_queue *, struct request *);
 typedef bool (elevator_is_urgent_fn) (struct request_queue *);
+typedef int (elevator_queue_empty_fn) (struct request_queue *);
 typedef struct request *(elevator_request_list_fn) (struct request_queue *, struct request *);
 typedef void (elevator_completed_req_fn) (struct request_queue *, struct request *);
 typedef int (elevator_may_queue_fn) (struct request_queue *, int);
@@ -51,6 +51,7 @@ struct elevator_ops
 	elevator_activate_req_fn *elevator_activate_req_fn;
 	elevator_deactivate_req_fn *elevator_deactivate_req_fn;
 
+	elevator_queue_empty_fn *elevator_queue_empty_fn; // SIO
 	elevator_completed_req_fn *elevator_completed_req_fn;
 
 	elevator_request_list_fn *elevator_former_req_fn;
@@ -91,10 +92,9 @@ struct elevator_type
  */
 struct elevator_queue
 {
-	struct elevator_ops *ops;
+	struct elevator_type *type;
 	void *elevator_data;
 	struct kobject kobj;
-	struct elevator_type *elevator_type;
 	struct mutex sysfs_lock;
 	struct hlist_head *hash;
 	unsigned int registered:1;
