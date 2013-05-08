@@ -307,7 +307,7 @@ static int msm_pmem_table_add(struct hlist_head *ptype,
 #ifndef CONFIG_MSM_MULTIMEDIA_USE_ION
 	struct file *file;
 	unsigned long kvstart;
-#endinf
+#endif
 	unsigned long len;
 	int rc = -ENOMEM;
 	struct msm_pmem_region *region;
