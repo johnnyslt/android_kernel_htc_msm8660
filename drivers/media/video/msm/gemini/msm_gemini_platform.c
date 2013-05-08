@@ -1,72 +1,13 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- *       copyright notice, this list of conditions and the following
- *       disclaimer in the documentation and/or other materials provided
- *       with the distribution.
- *     * Neither the name of Code Aurora Forum, Inc. nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
- * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
- * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * Alternatively, and instead of the terms immediately above, this
- * software may be relicensed by the recipient at their option under the
- * terms of the GNU General Public License version 2 ("GPL") and only
- * version 2.  If the recipient chooses to relicense the software under
- * the GPL, then the recipient shall replace all of the text immediately
- * above and including this paragraph with the text immediately below
- * and between the words START OF ALTERNATE GPL TERMS and END OF
- * ALTERNATE GPL TERMS and such notices and license terms shall apply
- * INSTEAD OF the notices and licensing terms given above.
- *
- * START OF ALTERNATE GPL TERMS
- *
- * Copyright (c) 2010, Code Aurora Forum. All rights reserved.
- *
- * This software was originally licensed under the Code Aurora Forum
- * Inc. Dual BSD/GPL License version 1.1 and relicensed as permitted
- * under the terms thereof by a recipient under the General Public
- * License Version 2.
+/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
  * only version 2 as published by the Free Software Foundation.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
- *
- * THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
- * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
- * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
- * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * END OF ALTERNATE GPL TERMS
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  */
 
 #include <linux/module.h>
@@ -75,51 +16,68 @@
 #include <mach/clk.h>
 #include <linux/io.h>
 #include <linux/android_pmem.h>
-/*#include <mach/msm_reqs.h>*/
-#ifdef CONFIG_MSM_CAMERA_7X30
-#include <mach/camera-7x30.h>
-#elif defined(CONFIG_MSM_CAMERA_8X60)
-#include <mach/camera-8x60.h>
-#endif
+#include <mach/camera.h>
+#include <mach/msm_subsystem_map.h>
 
 #include "msm_gemini_platform.h"
 #include "msm_gemini_common.h"
 #include "msm_gemini_hw.h"
 
-#ifdef CONFIG_MSM_NPA_SYSTEM_BUS
-/* NPA Flow ID */
-#define MSM_SYSTEM_BUS_RATE	MSM_AXI_FLOW_JPEG_12MP
-#else
 /* AXI rate in KHz */
 #define MSM_SYSTEM_BUS_RATE	160000
-#endif
+struct ion_client *gemini_client;
 
-void msm_gemini_platform_p2v(struct file  *file)
+void msm_gemini_platform_p2v(struct file  *file,
+				struct ion_handle **ionhandle)
 {
+#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+	ion_unmap_iommu(gemini_client, *ionhandle, CAMERA_DOMAIN, GEN_POOL);
+	ion_free(gemini_client, *ionhandle);
+	*ionhandle = NULL;
+#elif CONFIG_ANDROID_PMEM
 	put_pmem_file(file);
+#endif
 }
 
-uint32_t msm_gemini_platform_v2p(int fd, uint32_t len, struct file **file_p)
+uint32_t msm_gemini_platform_v2p(int fd, uint32_t len, struct file **file_p,
+				struct ion_handle **ionhandle)
 {
 	unsigned long paddr;
-	unsigned long kvstart;
 	unsigned long size;
 	int rc;
+#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+	*ionhandle = ion_import_fd(gemini_client, fd);
+	if (IS_ERR_OR_NULL(*ionhandle))
+		return 0;
 
+	rc = ion_map_iommu(gemini_client, *ionhandle, CAMERA_DOMAIN, GEN_POOL,
+			SZ_4K, 0, &paddr, (unsigned long *)&size, UNCACHED, 0);
+#elif CONFIG_ANDROID_PMEM
+	unsigned long kvstart;
 	rc = get_pmem_file(fd, &paddr, &kvstart, &size, file_p);
+#else
+	rc = 0;
+	paddr = 0;
+	size = 0;
+#endif
 	if (rc < 0) {
 		GMN_PR_ERR("%s: get_pmem_file fd %d error %d\n", __func__, fd,
 			rc);
-		return 0;
+		goto error1;
 	}
 
 	/* validate user input */
 	if (len > size) {
 		GMN_PR_ERR("%s: invalid offset + len\n", __func__);
-		return 0;
+		goto error1;
 	}
 
 	return paddr;
+error1:
+#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+	ion_free(gemini_client, *ionhandle);
+#endif
+	return 0;
 }
 
 int msm_gemini_platform_init(struct platform_device *pdev,
@@ -160,6 +118,7 @@ int msm_gemini_platform_init(struct platform_device *pdev,
 		GMN_PR_ERR("%s: ioremap failed\n", __func__);
 		goto fail1;
 	}
+
 	rc = msm_camio_jpeg_clk_enable();
 	if (rc) {
 		GMN_PR_ERR("%s: clk failed rc = %d\n", __func__, rc);
@@ -170,21 +129,24 @@ int msm_gemini_platform_init(struct platform_device *pdev,
 	rc = request_irq(gemini_irq, handler, IRQF_TRIGGER_RISING, "gemini",
 		context);
 	if (rc) {
-		GMN_PR_ERR("%s: request_irq failed, %d, JPEG = %d\n", __func__,
-			gemini_irq, INT_JPEG);
+		GMN_PR_ERR("%s: request_irq failed, %d\n", __func__,
+			gemini_irq);
 		goto fail3;
 	}
 
 	*mem  = gemini_mem;
 	*base = gemini_base;
 	*irq  = gemini_irq;
+
+#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+	gemini_client = msm_ion_client_create(-1, "camera/gemini");
+#endif
 	GMN_DBG("%s:%d] success\n", __func__, __LINE__);
 
 	return rc;
 
 fail3:
 	msm_camio_jpeg_clk_disable();
-
 fail2:
 	iounmap(gemini_base);
 fail1:
@@ -197,12 +159,14 @@ int msm_gemini_platform_release(struct resource *mem, void *base, int irq,
 	void *context)
 {
 	int result;
+
 	free_irq(irq, context);
 	result = msm_camio_jpeg_clk_disable();
 	iounmap(base);
 	release_mem_region(mem->start, resource_size(mem));
-
+#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+	ion_client_destroy(gemini_client);
+#endif
 	GMN_DBG("%s:%d] success\n", __func__, __LINE__);
 	return result;
 }
-
