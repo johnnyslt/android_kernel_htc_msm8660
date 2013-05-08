@@ -2483,18 +2483,15 @@ static int msm_pp_grab(struct msm_sync *sync, void __user *arg)
 		if (enable & (enable - 1)) {
 			pr_err("[CAM] %s: error: more than one PP request!\n",
 				__func__);
-			return -EINVAL;
 		}
 		if (sync->pp_mask) {
 			if (enable) {
 				pr_err("[CAM] %s: postproc %x is already enabled\n",
 					__func__, sync->pp_mask & enable);
-				return -EINVAL;
 			} else {
 				sync->pp_mask &= enable;
 				CDBG("[CAM] %s: sync->pp_mask %d enable %d\n",
 					__func__, sync->pp_mask, enable);
-				return 0;
 			}
 		}
 
