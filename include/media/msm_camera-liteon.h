@@ -42,9 +42,6 @@
 #include <linux/time.h>
 #endif
 
-#ifdef __KERNEL__
-#include <linux/ion.h>
-#endif
 #define MSM_CAM_IOCTL_MAGIC 'm'
 
 #define MSM_CAM_IOCTL_GET_SENSOR_INFO \
@@ -452,10 +449,6 @@ struct msm_frame {
 	/* Must atch to user space - msm_camera8x60_3D.h */
 	int stcam_quality_ind;
 	uint32_t stcam_conv_value;
-/*ION*/
-	struct ion_allocation_data ion_alloc;
-	struct ion_fd_data fd_data;
-
 };
 
 enum msm_st_frame_packing {
