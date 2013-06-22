@@ -1933,57 +1933,39 @@ static int mdp4_overlay_req2pipe(struct mdp_overlay *req, int mixer,
 }
 
 static int get_img(struct msmfb_data *img, struct fb_info *info,
-	unsigned long *start, unsigned long *len, struct file **srcp_file,
-	struct ion_handle **srcp_ihdl)
+	unsigned long *start, unsigned long *len, struct file **pp_file)
 {
-#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
-	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
-#endif
- 	struct file *file;
 	int put_needed, ret = 0, fb_num;
+	struct file *file;
 #ifdef CONFIG_ANDROID_PMEM
 	unsigned long vstart;
 #endif
+
 	if (img->flags & MDP_BLIT_SRC_GEM) {
-		*srcp_file = NULL;
+		*pp_file = NULL;
 		return kgsl_gem_obj_addr(img->memory_id, (int) img->priv,
 					 start, len);
 	}
 
-	if (img->flags & MDP_MEMORY_ID_TYPE_FB) {
-		file = fget_light(img->memory_id, &put_needed);
-		if (file == NULL)
-			return -EINVAL;
-
-		if (MAJOR(file->f_dentry->d_inode->i_rdev) == FB_MAJOR) {
-			fb_num = MINOR(file->f_dentry->d_inode->i_rdev);
-			if (get_fb_phys_info(start, len, fb_num))
-				ret = -1;
-			else
-				*srcp_file = file;
-		} else
-			ret = -1;
-		if (ret)
-			fput_light(file, put_needed);
-		return ret;
-	}
-
-#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
-	*srcp_ihdl = ion_import_fd(mfd->client, img->memory_id);
-	if (IS_ERR_OR_NULL(*srcp_ihdl))
-		return PTR_ERR(*srcp_ihdl);
-	if (!ion_phys(mfd->client, *srcp_ihdl, start, (size_t *) len))
-		return 0;
-	else
-		return -EINVAL;
-#endif
 #ifdef CONFIG_ANDROID_PMEM
-	if (!get_pmem_file(img->memory_id, start, &vstart,
-					    len, srcp_file))
+	if (!get_pmem_file(img->memory_id, start, &vstart, len, pp_file))
 		return 0;
-	else
-		return -EINVAL;
 #endif
+	file = fget_light(img->memory_id, &put_needed);
+	if (file == NULL)
+		return -1;
+
+	if (MAJOR(file->f_dentry->d_inode->i_rdev) == FB_MAJOR) {
+		fb_num = MINOR(file->f_dentry->d_inode->i_rdev);
+		if (get_fb_phys_info(start, len, fb_num))
+			ret = -1;
+		else
+			*pp_file = file;
+	} else
+		ret = -1;
+	if (ret)
+		fput_light(file, put_needed);
+	return ret;
 }
 
 int mdp4_overlay_3d(struct fb_info *info, struct msmfb_overlay_3d *req)
@@ -2548,7 +2530,8 @@ int mdp4_overlay_snapshot(struct msmfb_overlay_data *req, uint32_t phy_addr,
 }
 #endif
 
-int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
+int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req,
+		struct file **pp_src_file)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	struct msmfb_data *img;
@@ -2556,9 +2539,7 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 	struct mdp4_pipe_desc *pd;
 	ulong start, addr;
 	ulong len = 0;
-	struct file *srcp0_file = NULL;
-	struct ion_handle *srcp0_ihdl = NULL;
-	int ret = 0;
+	struct file *p_src_file = 0;
 
 	if (mfd == NULL)
 		return -ENODEV;
@@ -2600,7 +2581,7 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 	pd->player = pipe;	/* keep */
 
 	img = &req->data;
-	get_img(img, info, &start, &len, &srcp0_file, &srcp0_ihdl);
+	get_img(img, info, &start, &len, &p_src_file);
 	if (len == 0) {
 		if (virtualfb3d.is_3d && pipe->pipe_type == OVERLAY_TYPE_VIDEO)
 			atomic_set(&ov_play, 0);
@@ -2609,9 +2590,9 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 			complete(&ov_comp);
 
 		PR_DISP_ERR("%s: pmem Error\n", __func__);
-		ret = -1;
-		goto end;
+		return -1;
 	}
+	*pp_src_file = p_src_file;
 
 	addr = start + img->offset;
 	pipe->srcp0_addr = addr;
@@ -2716,7 +2697,7 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 				if (atomic_read(&ov_unset))
 					complete(&ov_comp);
 
-				goto end;
+				return 0;
 			}
 #ifdef CONFIG_FB_MSM_MIPI_DSI
 			if (ctrl->panel_mode & MDP4_PANEL_DSI_CMD) {
@@ -2757,17 +2738,7 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 			atomic_set(&mfd->mdp_pdata->dcr_panel_pinfo->video_mode, 1);
 		}
 	}
-	
-end:
-#ifdef CONFIG_ANDROID_PMEM
-	if (srcp0_file)
-		put_pmem_file(srcp0_file);
-#endif
-#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
-	if (!IS_ERR_OR_NULL(srcp0_ihdl))
-		ion_free(mfd->client, srcp0_ihdl);
-#endif
-	return ret;
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
