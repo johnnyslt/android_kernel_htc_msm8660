@@ -4041,9 +4041,9 @@ static int ext4_load_journal(struct super_block *sb,
 	if (!(journal->j_flags & JBD2_BARRIER))
 		ext4_msg(sb, KERN_INFO, "barriers disabled");
 
-	if (!really_read_only && test_opt(sb, UPDATE_JOURNAL)) {
-		err = jbd2_journal_update_format(journal);
-		if (err)  {
+/*	if (!really_read_only && test_opt(sb, UPDATE_JOURNAL))*/ {
+/*		err = jbd2_journal_update_format(journal);*/
+		 if (err)  {
 			ext4_msg(sb, KERN_ERR, "error updating journal");
 			jbd2_journal_destroy(journal);
 			return err;
