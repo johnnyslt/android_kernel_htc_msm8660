@@ -34,6 +34,13 @@
 
 #include <trace/events/power.h>
 
+/* Sync or not governor and max freq scale on second core */
+static int sync_cores_scaling = 0;
+static void cpufreq_sync_cores(struct cpufreq_policy *policy, int object);
+#define SYNC_scaling_min_freq 1
+#define SYNC_scaling_max_freq 2
+#define SYNC_scaling_governor 4
+
 /**
  * The "cpufreq driver" - the arch- or hardware-dependent low
  * level driver of CPUFreq support, and its spinlock. This lock
@@ -428,27 +435,30 @@ static int __cpufreq_set_policy(struct cpufreq_policy *data,
 /**
  * cpufreq_per_cpu_attr_write() / store_##file_name() - sysfs write access
  */
-#define store_one(file_name, object)			\
-static ssize_t store_##file_name					\
+#define store_one(file_name, object)			                        \
+static ssize_t store_##file_name					                        \
 (struct cpufreq_policy *policy, const char *buf, size_t count)		\
-{									\
-	unsigned int ret = -EINVAL;					\
-	struct cpufreq_policy new_policy;				\
-									\
-	ret = cpufreq_get_policy(&new_policy, policy->cpu);		\
-	if (ret)							\
-		return -EINVAL;						\
-									\
-	ret = sscanf(buf, "%u", &new_policy.object);			\
-	if (ret != 1)							\
-		return -EINVAL;						\
-	/* hack for cpufreq_ceiling feature \
-	 * TODO: move to nofifier */ \
-	perflock_##file_name(new_policy.object, policy->cpu);   \
-	ret = __cpufreq_set_policy(policy, &new_policy);		\
-	policy->user_policy.object = policy->object;			\
-									\
-	return ret ? ret : count;					\
+{									                                                \
+	unsigned int ret = -EINVAL;				                            	\
+	struct cpufreq_policy new_policy;			                        	\
+                                                                  \
+	ret = cpufreq_get_policy(&new_policy, policy->cpu);         		\
+	if (ret)					                                          		\
+		return -EINVAL;						                                    \
+                                                                  \
+	ret = sscanf(buf, "%u", &new_policy.object);			              \
+	if (ret != 1)							                                      \
+		return -EINVAL;						                                    \
+	/* hack for cpufreq_ceiling feature                             \
+	 * TODO: move to nofifier */                                    \
+	perflock_##file_name(new_policy.object, policy->cpu);           \
+	ret = __cpufreq_set_policy(policy, &new_policy);		            \
+	policy->user_policy.object = policy->object;			              \
+                                                                  \
+	if (sync_cores_scaling)						                              \
+                cpufreq_sync_cores(policy, SYNC_##file_name);		  \
+                                                                  \
+	return ret ? ret : count;					                              \
 }
 
 store_one(scaling_min_freq, min);
@@ -482,6 +492,52 @@ static ssize_t show_scaling_governor(struct cpufreq_policy *policy, char *buf)
 	return -EINVAL;
 }
 
+/**
+ * Allow compatibility with CM CPU Performances settings which only
+ * set cpu governor and min/max frequencies on the first cpu core
+ */
+static void cpufreq_sync_cores(struct cpufreq_policy *policy, int obj)
+{
+	int alt_core, was_off;
+	struct cpufreq_policy new_pol, *alt_pol;
+	char * governor;
+
+	alt_core = !policy->cpu ? 1 : 0;
+	was_off = !cpu_online(alt_core);
+	if (was_off)
+		cpu_up(alt_core);
+
+	if(!cpufreq_get_policy(&new_pol, alt_core)) {
+
+		alt_pol = cpufreq_cpu_get(alt_core);
+		if(alt_pol) {
+
+			if (obj & SYNC_scaling_governor)
+				governor = policy->governor->name;
+			else
+				governor = alt_pol->governor->name;
+
+			cpufreq_parse_governor(governor,
+				&new_pol.policy, &new_pol.governor);
+
+			if (obj & SYNC_scaling_min_freq)
+				new_pol.min = policy->min;
+
+			if (obj & SYNC_scaling_max_freq)
+				new_pol.max = policy->max;
+
+			__cpufreq_set_policy(alt_pol, &new_pol);
+
+			alt_pol->user_policy.policy = alt_pol->policy;
+			alt_pol->user_policy.governor = alt_pol->governor;
+
+			cpufreq_cpu_put(alt_pol);
+		}
+	}
+
+	if (was_off)
+		cpu_down(alt_core);
+}
 
 /**
  * store_scaling_governor - store policy for the specified CPU
@@ -490,12 +546,13 @@ static ssize_t store_scaling_governor(struct cpufreq_policy *policy,
 					const char *buf, size_t count)
 {
 	unsigned int ret = -EINVAL;
-	char	str_governor[16];
+	char str_governor[CPUFREQ_NAME_LEN];
 	struct cpufreq_policy new_policy;
+#ifdef CONFIG_DEBUG_KOBJECT
 	char *envp[3];
-	char buf1[64];
-	char buf2[64];
-
+	char buf1[32];
+	char buf2[8];
+#endif
 	ret = cpufreq_get_policy(&new_policy, policy->cpu);
 	if (ret)
 		return ret;
@@ -515,7 +572,11 @@ static ssize_t store_scaling_governor(struct cpufreq_policy *policy,
 	policy->user_policy.policy = policy->policy;
 	policy->user_policy.governor = policy->governor;
 
-	sysfs_notify(&policy->kobj, NULL, "scaling_governor");
+	if (sync_cores_scaling)
+		cpufreq_sync_cores(policy, SYNC_scaling_governor);
+
+#ifdef CONFIG_DEBUG_KOBJECT
+	/* see lib/kobject_uevent */
 
 	snprintf(buf1, sizeof(buf1), "GOV=%s", policy->governor->name);
 	snprintf(buf2, sizeof(buf2), "CPU=%u", policy->cpu);
@@ -523,7 +584,7 @@ static ssize_t store_scaling_governor(struct cpufreq_policy *policy,
 	envp[1] = buf2;
 	envp[2] = NULL;
 	kobject_uevent_env(cpufreq_global_kobject, KOBJ_ADD, envp);
-
+#endif
 	if (ret)
 		return ret;
 	else
@@ -2121,6 +2182,10 @@ static int __init cpufreq_core_init(void)
 						&cpu_sysdev_class.kset.kobj);
 	BUG_ON(!cpufreq_global_kobject);
 	register_syscore_ops(&cpufreq_syscore_ops);
+
+#ifdef CONFIG_CPU_FREQ_SYNC_SCALING
+	sync_cores_scaling = 1;
+#endif
 
 #ifdef CONFIG_CPU_VOLTAGE_TABLE
 	rc = sysfs_create_group(cpufreq_global_kobject, &vddtbl_attr_group);

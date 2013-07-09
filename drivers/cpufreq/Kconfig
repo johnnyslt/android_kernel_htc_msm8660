@@ -212,6 +212,17 @@ config CPU_FREQ_GOV_CONSERVATIVE
 
 	  If in doubt, say N.
 
+config CPU_FREQ_SYNC_SCALING
+	bool "Apply governor scaling to the two CPU cores"
+	depends on CPU_FREQ && SMP
+	default y if CPU_FREQ && SMP
+	help
+	  Allow compatibility with CM CPU Performances settings which only
+	  set cpu governor and min/max frequencies on the first cpu core
+
+	  If Y, changing scaling of a core via sysfs will also update
+	  settings for the second one.
+
 menu "x86 CPU frequency scaling drivers"
 depends on X86
 source "drivers/cpufreq/Kconfig.x86"
