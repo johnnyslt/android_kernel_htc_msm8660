@@ -1258,7 +1258,7 @@ static struct adie_codec_dev_profile ispkr_mono_profile = {
 
 static struct snddev_icodec_data snddev_ispkr_mono_data = {
 	.capability = (SNDDEV_CAP_RX | SNDDEV_CAP_VOICE),
-	.name = "speaker_mono_rx",
+	.name = "speaker_rx",
 	.copp_id = 0,
 	.profile = &ispkr_mono_profile,
 	.channel_mode = 1,
